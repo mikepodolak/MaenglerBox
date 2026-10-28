@@ -757,25 +757,6 @@ input[type='range'] {
 
 /* ---- presets, randomize, locks ---- */
 
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.segmented button {
-  border: none;
-  border-radius: 0;
-  min-width: 52px;
-}
-
-.segmented button[aria-pressed='true'] {
-  background: var(--accent);
-  color: #111;
-  font-weight: 600;
-}
-
 .segmented.small button {
   min-width: 0;
   min-height: 32px;
