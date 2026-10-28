@@ -20,7 +20,17 @@ Patches are saved on the device (IndexedDB).
 - `src/patch/` is the patch model: modules, cables and params as plain data. Every edit is a pure function that returns a new patch, which keeps undo, saving and sharing simple.
 - `src/engine/` turns a patch into sound. `PatchRuntime` keeps the Web Audio graph in step with the patch, and `Scheduler` is a lookahead clock that stamps gate events with exact audio times.
 - `src/modules/` holds module types. Each one has a definition (ports and params) and a `create` function that builds its audio nodes.
-- `src/ui/` is the interface. Right now it's a simple list editor; the patching canvas replaces it next.
+- `src/dsp/` holds sample-level DSP that runs in AudioWorklets (the FM synth). It has no Web Audio dependencies, so it's unit-tested in Node.
+- `src/ui/` is the interface: the patching canvas, the inspector panel and its step editor.
+
+## Using the canvas
+
+- Drag empty space to pan, pinch (or ctrl+scroll) to zoom. **Fit** brings everything into view.
+- Drag a module by its title bar. Tap a module to open its settings.
+- Drag from a jack to another jack to patch a cable. Drag a cable off an input to unplug it. Tap a cable to select it, then tap the red × to delete it.
+- Jack colours: orange is audio, teal is CV, yellow is gates and notes.
+- In the sequencer's step grid, tap a step to select it and tap it again to turn it on or off. The fill shows its chance of playing.
+- Undo and redo cover every edit (⌘Z / ⇧⌘Z on a keyboard).
 
 Ports carry three kinds of signal: **audio**, **cv** (modulation) and **gate** (timed events like triggers and notes).
 Audio and CV can be patched into each other; gates only connect to gates.

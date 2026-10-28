@@ -46,7 +46,7 @@ export const oscillator: ModuleType = {
     outputs: [{ id: 'out', label: 'Out', kind: 'audio' }],
     params: [
       { id: 'freq', label: 'Freq', min: 20, max: 8000, default: 220, unit: 'Hz', curve: 'exp' },
-      { id: 'wave', label: 'Wave', min: 0, max: 3, default: 0, step: 1 },
+      { id: 'wave', label: 'Wave', min: 0, max: 3, default: 0, step: 1, options: ['Sine', 'Triangle', 'Saw', 'Square'] },
       { id: 'fmDepth', label: 'FM depth', min: 0, max: 4000, default: 0, unit: 'Hz', curve: 'exp' },
     ],
   },
@@ -170,8 +170,8 @@ export const clock: ModuleType = {
     outputs: [{ id: 'out', label: 'Out', kind: 'gate' }],
     params: [
       { id: 'bpm', label: 'BPM', min: 20, max: 300, default: 120, step: 0.1 },
-      { id: 'division', label: 'Rate', min: 0, max: CLOCK_DIVISIONS.length - 1, default: 3, step: 1 },
-      { id: 'running', label: 'Run', min: 0, max: 1, default: 1, step: 1 },
+      { id: 'division', label: 'Rate', min: 0, max: CLOCK_DIVISIONS.length - 1, default: 3, step: 1, options: CLOCK_DIVISION_LABELS },
+      { id: 'running', label: 'Run', min: 0, max: 1, default: 1, step: 1, options: ['Stopped', 'Running'] },
     ],
   },
   create({ ctx, scheduler }, params) {

@@ -42,11 +42,12 @@ export class PatchRuntime {
       if (!live) {
         const type = this.lookup(instance.type);
         if (!type) continue;
-        this.modules.set(instance.id, { instance, runtime: type.create(this.env, { ...instance.params }) });
+        this.modules.set(instance.id, { instance, runtime: type.create(this.env, { ...instance.params }, instance.data) });
       } else if (live.instance !== instance) {
         for (const [k, v] of Object.entries(instance.params)) {
           if (live.instance.params[k] !== v) live.runtime.setParam(k, v);
         }
+        if (live.instance.data !== instance.data) live.runtime.setData?.(instance.data);
         live.instance = instance;
       }
     }
@@ -57,6 +58,10 @@ export class PatchRuntime {
         if (undo) this.cables.set(cable.id, undo);
       }
     }
+  }
+
+  getState(moduleId: string, now: number): unknown {
+    return this.modules.get(moduleId)?.runtime.getState?.(now);
   }
 
   dispose(): void {

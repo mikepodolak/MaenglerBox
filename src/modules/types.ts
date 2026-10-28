@@ -16,6 +16,10 @@ export interface RuntimeModule {
   inputs: Record<string, InputTarget>;
   outputs: Record<string, OutputSource>;
   setParam(id: string, value: number): void;
+  /** Receives the module's structured data whenever it changes. */
+  setData?(data: unknown): void;
+  /** Live state for the UI (like a sequencer's playhead) as of audio time `now`. */
+  getState?(now: number): unknown;
   dispose(): void;
 }
 
@@ -28,7 +32,9 @@ export interface EngineEnv {
 
 export interface ModuleType {
   def: ModuleDef;
-  create(env: EngineEnv, params: Record<string, number>): RuntimeModule;
+  /** AudioWorklet scripts that must be loaded before `create` runs. */
+  worklets?: string[];
+  create(env: EngineEnv, params: Record<string, number>, data: unknown): RuntimeModule;
 }
 
 /** Glide parameter changes a little so slider moves don't click. */

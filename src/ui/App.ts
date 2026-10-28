@@ -1,23 +1,18 @@
 import type { AppStore } from '../app/store';
 import type { AudioEngine, EngineState } from '../engine/AudioEngine';
 import { allDefs, getDef } from '../modules/registry';
-import { addModule, connect, disconnect, findModule, PatchError, removeModule, setParam } from '../patch/model';
-import { formatParam, fromNormalized, toNormalized } from '../patch/params';
-import type { ModuleInstance, Patch, PortRef } from '../patch/types';
+import { addModule } from '../patch/model';
+import { Canvas } from './Canvas';
 import { h } from './dom';
+import { Inspector } from './Inspector';
 
-const SLIDER_STEPS = 1000;
-
-/**
- * Temporary list-style editor for step 1. It exercises the engine, model and
- * storage end to end; the patching canvas replaces it in step 2.
- */
 export class App {
-  private structureKey = '';
-  private main = h('main', { class: 'modules' });
-  private cablesEl = h('section', { class: 'cables' });
+  private canvas: Canvas;
+  private inspector: Inspector;
   private saveEl = h('span', { class: 'save-state' });
   private audioBtn = h('button', { class: 'audio-btn' });
+  private undoBtn = h('button', { class: 'icon-btn', 'aria-label': 'Undo', title: 'Undo' }, '↶');
+  private redoBtn = h('button', { class: 'icon-btn', 'aria-label': 'Redo', title: 'Redo' }, '↷');
   private nameInput = h('input', { class: 'patch-name', 'aria-label': 'Patch name' });
   private overlay = h('div', { class: 'start-overlay' });
 
@@ -25,7 +20,10 @@ export class App {
     private readonly root: HTMLElement,
     private readonly store: AppStore,
     private readonly engine: AudioEngine,
-  ) {}
+  ) {
+    this.canvas = new Canvas(store);
+    this.inspector = new Inspector(store);
+  }
 
   mount(): void {
     this.nameInput.addEventListener('change', () => {
@@ -35,6 +33,15 @@ export class App {
     this.audioBtn.addEventListener('click', () => {
       if (this.engine.state === 'running') void this.engine.suspend();
       else void this.engine.start();
+    });
+    this.undoBtn.addEventListener('click', () => this.store.undo());
+    this.redoBtn.addEventListener('click', () => this.store.redo());
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !(e.target instanceof HTMLInputElement)) {
+        e.preventDefault();
+        if (e.shiftKey) this.store.redo();
+        else this.store.undo();
+      }
     });
 
     this.overlay.append(
@@ -53,14 +60,19 @@ export class App {
       this.nameInput,
       this.saveEl,
       h('span', { class: 'spacer' }),
-      h('button', { onclick: () => void this.openMenu() }, 'Patches'),
+      this.undoBtn,
+      this.redoBtn,
+      h('button', { class: 'add-btn', onclick: () => this.openPalette() }, '+ Module'),
+      h('button', { onclick: () => this.canvas.fit() }, 'Fit'),
+      h('button', { onclick: () => void this.openPatches() }, 'Patches'),
       this.audioBtn,
     );
 
-    this.root.replaceChildren(header, this.main, this.cablesEl, this.overlay);
+    this.root.replaceChildren(header, h('div', { class: 'workspace' }, this.canvas.el, this.inspector.el), this.overlay);
     this.store.subscribe(() => this.render());
     this.engine.onState((s) => this.renderAudio(s));
     this.render();
+    this.loop();
   }
 
   private render(): void {
@@ -68,158 +80,81 @@ export class App {
     this.engine.sync(p);
     if (document.activeElement !== this.nameInput) this.nameInput.value = p.name;
     this.saveEl.textContent =
-      this.store.saveState === 'saving' ? 'Saving…' : this.store.saveState === 'error' ? 'Not saved' : 'Saved on this device';
+      this.store.saveState === 'saving' ? 'Saving…' : this.store.saveState === 'error' ? 'Not saved' : 'Saved';
     this.saveEl.dataset.state = this.store.saveState;
+    this.undoBtn.disabled = !this.store.canUndo;
+    this.redoBtn.disabled = !this.store.canRedo;
+    this.canvas.render();
+    this.inspector.render();
+  }
 
-    // Rebuild the DOM only when modules or cables change, so sliders keep their touch while dragging.
-    const key = p.id + '|' + p.modules.map((m) => m.id).join() + '|' + p.cables.map((c) => c.id).join();
-    if (key !== this.structureKey) {
-      this.structureKey = key;
-      this.main.replaceChildren(...p.modules.map((m) => this.moduleCard(m)), this.addModuleCard());
-      this.renderCables(p);
-    }
-    this.updateParamReadouts(p);
+  /** Drives playheads and other live displays. */
+  private loop(): void {
+    const state = (id: string) => this.engine.moduleState(id);
+    const frame = () => {
+      if (this.engine.state === 'running') {
+        this.canvas.tick(state);
+        this.inspector.tick(state);
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
   }
 
   private renderAudio(s: EngineState): void {
-    this.audioBtn.textContent = s === 'running' ? 'Audio on' : s === 'starting' ? 'Starting…' : 'Audio off';
+    this.audioBtn.textContent =
+      s === 'running' ? 'Audio on' : s === 'starting' ? 'Starting…' : s === 'error' ? 'Audio error' : 'Audio off';
     this.audioBtn.dataset.state = s;
     this.overlay.hidden = s !== 'off';
   }
 
-  private moduleCard(m: ModuleInstance): HTMLElement {
-    const def = getDef(m.type)!;
-    const params = def.params.map((p) => {
-      const slider = h('input', {
-        type: 'range',
-        min: 0,
-        max: SLIDER_STEPS,
-        step: 1,
-        'data-param': p.id,
-        'aria-label': `${def.label} ${p.label}`,
-      });
-      slider.value = String(Math.round(toNormalized(p, m.params[p.id]) * SLIDER_STEPS));
-      slider.addEventListener('input', () => {
-        const v = fromNormalized(p, Number(slider.value) / SLIDER_STEPS);
-        this.store.update((patch) => setParam(patch, getDef, m.id, p.id, v));
-      });
-      return h(
-        'label',
-        { class: 'param' },
-        h('span', { class: 'param-label' }, p.label),
-        slider,
-        h('output', { 'data-readout': p.id }),
-      );
-    });
-    const ports = (side: 'inputs' | 'outputs', arrow: string) =>
-      def[side].length
-        ? h('div', { class: `ports ${side}` }, arrow, ...def[side].map((pt) => h('span', { class: `port ${pt.kind}` }, pt.label)))
-        : null;
-    return h(
-      'article',
-      { class: 'module', 'data-module': m.id },
-      h(
-        'div',
-        { class: 'module-head' },
-        h('h2', {}, def.label),
-        h('button', {
-          class: 'icon',
-          'aria-label': `Remove ${def.label}`,
-          onclick: () => this.store.update((p) => removeModule(p, m.id)),
-        }, '×'),
-      ),
-      ports('inputs', 'in'),
-      ports('outputs', 'out'),
-      ...params,
-    );
-  }
-
-  private updateParamReadouts(p: Patch): void {
-    for (const m of p.modules) {
-      const card = this.main.querySelector<HTMLElement>(`[data-module="${m.id}"]`);
-      const def = getDef(m.type);
-      if (!card || !def) continue;
-      for (const param of def.params) {
-        const out = card.querySelector(`[data-readout="${param.id}"]`);
-        if (out) out.textContent = formatParam(param, m.params[param.id]);
-        const slider = card.querySelector<HTMLInputElement>(`[data-param="${param.id}"]`);
-        if (slider && document.activeElement !== slider) {
-          slider.value = String(Math.round(toNormalized(param, m.params[param.id]) * SLIDER_STEPS));
-        }
-      }
-    }
-  }
-
-  private addModuleCard(): HTMLElement {
-    const select = h('select', { 'aria-label': 'Module type' }, ...allDefs().map((d) => h('option', { value: d.type }, d.label)));
-    return h(
-      'article',
-      { class: 'module add' },
-      h('h2', {}, 'Add module'),
-      select,
-      h('button', {
-        onclick: () => {
-          const def = getDef(select.value);
-          if (def) this.store.update((p) => addModule(p, def, 0, 0)[0]);
-        },
-      }, 'Add'),
-    );
-  }
-
-  private renderCables(p: Patch): void {
-    const name = (ref: PortRef, side: 'inputs' | 'outputs') => {
-      const m = findModule(p, ref.module);
-      const def = getDef(m.type)!;
-      return `${def.label} ${def[side].find((x) => x.id === ref.port)?.label ?? ref.port}`;
+  private openPalette(): void {
+    const dialog = h('dialog', { class: 'sheet palette' });
+    const close = () => {
+      dialog.close();
+      dialog.remove();
     };
-    const options = (side: 'inputs' | 'outputs') =>
-      p.modules.flatMap((m) =>
-        getDef(m.type)![side].map((pt) =>
-          h('option', { value: JSON.stringify({ module: m.id, port: pt.id }) }, `${getDef(m.type)!.label} ${pt.label} (${pt.kind})`),
-        ),
-      );
-    const fromSel = h('select', { 'aria-label': 'From output' }, ...options('outputs'));
-    const toSel = h('select', { 'aria-label': 'To input' }, ...options('inputs'));
-    const error = h('p', { class: 'error', role: 'status' });
-
-    this.cablesEl.replaceChildren(
-      h('h2', {}, 'Cables'),
+    dialog.append(
+      h('h2', {}, 'Add a module'),
       h(
         'ul',
         {},
-        ...p.cables.map((c) =>
+        ...allDefs().map((d) =>
           h(
             'li',
             {},
-            `${name(c.from, 'outputs')} → ${name(c.to, 'inputs')}`,
-            h('button', { class: 'icon', 'aria-label': 'Remove cable', onclick: () => this.store.update((x) => disconnect(x, c.id)) }, '×'),
+            h(
+              'button',
+              {
+                onclick: () => {
+                  const def = getDef(d.type)!;
+                  const spot = this.canvas.freeSpot();
+                  let added = '';
+                  this.store.update((p) => {
+                    const [next, m] = addModule(p, def, spot.x, spot.y);
+                    added = m.id;
+                    return next;
+                  });
+                  this.store.select(added);
+                  close();
+                },
+              },
+              h('strong', {}, d.label),
+              d.description ? h('span', {}, d.description) : null,
+            ),
           ),
         ),
       ),
-      h(
-        'div',
-        { class: 'connect-row' },
-        fromSel,
-        h('span', {}, '→'),
-        toSel,
-        h('button', {
-          onclick: () => {
-            if (!fromSel.value || !toSel.value) return;
-            try {
-              this.store.update((x) => connect(x, getDef, JSON.parse(fromSel.value), JSON.parse(toSel.value))[0]);
-            } catch (e) {
-              error.textContent = e instanceof PatchError ? e.message : 'Could not connect';
-            }
-          },
-        }, 'Connect'),
-      ),
-      error,
+      h('div', { class: 'dialog-actions' }, h('button', { onclick: close }, 'Cancel')),
     );
+    dialog.addEventListener('cancel', close);
+    document.body.append(dialog);
+    dialog.showModal();
   }
 
-  private async openMenu(): Promise<void> {
+  private async openPatches(): Promise<void> {
     const list = await this.store.storage.list();
-    const dialog = h('dialog', { class: 'patches' });
+    const dialog = h('dialog', { class: 'sheet patches' });
     const close = () => {
       dialog.close();
       dialog.remove();
@@ -251,6 +186,7 @@ export class App {
         h('button', { onclick: close }, 'Close'),
       ),
     );
+    dialog.addEventListener('cancel', close);
     document.body.append(dialog);
     dialog.showModal();
   }
