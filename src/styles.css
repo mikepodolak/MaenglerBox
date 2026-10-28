@@ -367,7 +367,11 @@ svg.cables {
 }
 
 .node-head {
-  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 4px 4px 12px;
   font-weight: 600;
   font-size: 14px;
   border-bottom: 1px solid var(--line);
@@ -476,6 +480,50 @@ svg.cables {
 .seq-strip span.playing {
   outline: 2px solid var(--text);
   outline-offset: -1px;
+}
+
+/* Settings button on each card: always available, in both modes. */
+.node-open {
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+}
+
+/* Play mode: nothing moves, and jacks are visibly locked. */
+.canvas[data-mode='play'] .node-head {
+  cursor: pointer;
+}
+
+.canvas[data-mode='play'] .jack {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.canvas[data-mode='play'] .cable-hit {
+  pointer-events: none;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  border-radius: 0;
+  min-width: 52px;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--accent);
+  color: #111;
+  font-weight: 600;
 }
 
 /* ---- params ---- */
@@ -725,7 +773,7 @@ input[type='range'] {
 
 /* ---- phones: inspector becomes a bottom sheet ---- */
 
-@media (max-width: 720px) {
+@media (max-width: 820px) {
   .inspector {
     position: absolute;
     left: 0;
@@ -758,5 +806,9 @@ input[type='range'] {
     min-height: 36px;
     padding: 4px 10px;
     font-size: 14px;
+  }
+
+  .segmented button {
+    min-width: 44px;
   }
 }
