@@ -17,6 +17,7 @@ export function fromNormalized(p: ParamDef, n: number): number {
 }
 
 export function formatParam(p: ParamDef, value: number): string {
+  if (p.options) return p.options[Math.round(value - p.min)] ?? String(value);
   const digits = p.step && p.step >= 1 ? 0 : Math.abs(value) >= 100 ? 0 : Math.abs(value) >= 10 ? 1 : 3;
   return `${value.toFixed(digits)}${p.unit ? ` ${p.unit}` : ''}`;
 }

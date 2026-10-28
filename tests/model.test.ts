@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getDef } from '../src/modules/registry';
-import { addModule, connect, createPatch, deserializePatch, disconnect, PatchError, removeModule, setParam } from '../src/patch/model';
+import { addModule, connect, createPatch, deserializePatch, disconnect, PatchError, removeModule, setModuleData, setParam } from '../src/patch/model';
 import { defaultPatch } from '../src/patch/defaultPatch';
 
 const def = (t: string) => getDef(t)!;
@@ -45,7 +45,7 @@ describe('patch model', () => {
 
   it('removing a module removes its cables', () => {
     const p = defaultPatch(getDef);
-    const amp = p.modules.find((m) => m.type === 'vca')!;
+    const amp = p.modules.find((m) => m.type === 'fm')!;
     const after = removeModule(p, amp.id);
     expect(after.cables.every((c) => c.from.module !== amp.id && c.to.module !== amp.id)).toBe(true);
     expect(after.cables).toHaveLength(1);
@@ -97,5 +97,29 @@ describe('deserializePatch', () => {
   it('rejects things that are not patches', () => {
     expect(() => deserializePatch({ hello: 1 }, getDef)).toThrow(PatchError);
     expect(() => deserializePatch(null, getDef)).toThrow(PatchError);
+  });
+});
+
+describe('module data', () => {
+  it('creates sequencer steps on add and validates them on set', () => {
+    let [p, seq] = addModule(createPatch(), def('sequencer'));
+    const data = seq.data as { steps: { note: number; chance: number }[] };
+    expect(data.steps).toHaveLength(32);
+    const steps = data.steps.map((s, i) => (i === 0 ? { ...s, note: 999, chance: -1 } : s));
+    p = setModuleData(p, getDef, seq.id, { steps });
+    const saved = p.modules[0].data as typeof data;
+    expect(saved.steps[0].note).toBe(127);
+    expect(saved.steps[0].chance).toBe(0);
+  });
+
+  it('repairs missing or corrupt sequencer data when loading', () => {
+    const p = deserializePatch(
+      { version: 1, modules: [{ id: 's', type: 'sequencer', params: {}, data: { steps: [null, { on: 'yes', note: 61 }] } }], cables: [] },
+      getDef,
+    );
+    const steps = (p.modules[0].data as { steps: { on: boolean; note: number }[] }).steps;
+    expect(steps).toHaveLength(32);
+    expect(steps[1].note).toBe(61);
+    expect(typeof steps[1].on).toBe('boolean');
   });
 });

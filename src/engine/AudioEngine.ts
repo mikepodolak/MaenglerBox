@@ -1,9 +1,9 @@
-import { getModuleType } from '../modules/registry';
+import { allWorklets, getModuleType } from '../modules/registry';
 import type { Patch } from '../patch/types';
 import { PatchRuntime } from './PatchRuntime';
 import { Scheduler } from './Scheduler';
 
-export type EngineState = 'off' | 'starting' | 'running' | 'suspended';
+export type EngineState = 'off' | 'starting' | 'running' | 'suspended' | 'error';
 
 /**
  * Owns the AudioContext. Browsers (iOS Safari above all) only allow audio to
@@ -15,6 +15,8 @@ export class AudioEngine {
   private runtime: PatchRuntime | null = null;
   private scheduler: Scheduler | null = null;
   private pending: Patch | null = null;
+  private worklets: Promise<void> = Promise.resolve();
+  private analyser: AnalyserNode | null = null;
   private listeners = new Set<(s: EngineState) => void>();
   state: EngineState = 'off';
 
@@ -42,11 +44,25 @@ export class AudioEngine {
       limiter.attack.value = 0.002;
       limiter.release.value = 0.1;
       limiter.connect(ctx.destination);
+      this.analyser = ctx.createAnalyser();
+      this.analyser.fftSize = 2048;
+      limiter.connect(this.analyser);
       this.scheduler = new Scheduler({ now: () => ctx.currentTime });
       this.runtime = new PatchRuntime({ ctx, scheduler: this.scheduler, master: limiter }, getModuleType);
       unlockWithSilentBuffer(ctx);
+      // Resume inside the gesture first; iOS only honours it synchronously.
+      const resumed = ctx.resume();
+      this.worklets = Promise.all(allWorklets().map((url) => ctx.audioWorklet.addModule(url))).then(() => undefined);
+      await resumed;
     }
     await this.ctx.resume();
+    try {
+      await this.worklets;
+    } catch (e) {
+      console.error('Could not load audio worklets', e);
+      this.setState('error');
+      return;
+    }
     this.scheduler!.start();
     if (this.pending) this.runtime!.sync(this.pending);
     this.setState(this.ctx.state === 'running' ? 'running' : 'suspended');
@@ -61,6 +77,20 @@ export class AudioEngine {
   sync(patch: Patch): void {
     this.pending = patch;
     this.runtime?.sync(patch);
+  }
+
+  /** Current RMS level of the master output, 0..1. */
+  level(): number {
+    if (!this.analyser) return 0;
+    const buf = new Float32Array(this.analyser.fftSize);
+    this.analyser.getFloatTimeDomainData(buf);
+    return Math.sqrt(buf.reduce((sum, x) => sum + x * x, 0) / buf.length);
+  }
+
+  /** Live UI state of a module, or undefined when audio isn't running. */
+  moduleState(moduleId: string): unknown {
+    if (!this.ctx || !this.runtime) return undefined;
+    return this.runtime.getState(moduleId, this.ctx.currentTime);
   }
 
   private setState(s: EngineState): void {

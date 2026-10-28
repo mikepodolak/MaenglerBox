@@ -6,10 +6,17 @@ import { debounce, PatchStore } from '../storage/patchStore';
 
 export type SaveState = 'saved' | 'saving' | 'error';
 
+const HISTORY_LIMIT = 200;
+
 /** Holds the open patch, notifies views on change, and autosaves to the device. */
 export class AppStore {
   patch: Patch = createPatch();
   saveState: SaveState = 'saved';
+  selected: string | null = null;
+  private undoStack: Patch[] = [];
+  private redoStack: Patch[] = [];
+  private lastCoalesce: string | undefined;
+  private lastEditAt = 0;
   private listeners = new Set<() => void>();
   private readonly persist = debounce(() => void this.save(), 400);
 
@@ -40,11 +47,58 @@ export class AppStore {
     return () => this.listeners.delete(fn);
   }
 
-  /** Apply an edit. All patch changes go through here so audio and storage stay in step. */
-  update(fn: (p: Patch) => Patch): void {
+  /**
+   * Apply an edit. All patch changes go through here so audio, undo and storage stay in step.
+   * Edits sharing a `coalesce` key in quick succession (a slider drag) undo as one step.
+   */
+  update(fn: (p: Patch) => Patch, coalesce?: string): void {
     const next = fn(this.patch);
     if (next === this.patch) return;
+    const now = Date.now();
+    if (!coalesce || coalesce !== this.lastCoalesce || now - this.lastEditAt > 1000) {
+      this.undoStack.push(this.patch);
+      if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
+    }
+    this.redoStack = [];
+    this.lastCoalesce = coalesce;
+    this.lastEditAt = now;
+    this.setPatch(next);
+  }
+
+  get canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  get canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  undo(): void {
+    const prev = this.undoStack.pop();
+    if (!prev) return;
+    this.redoStack.push(this.patch);
+    this.lastCoalesce = undefined;
+    this.setPatch(prev);
+  }
+
+  redo(): void {
+    const next = this.redoStack.pop();
+    if (!next) return;
+    this.undoStack.push(this.patch);
+    this.lastCoalesce = undefined;
+    this.setPatch(next);
+  }
+
+  /** UI selection lives here so every view agrees on it. It isn't saved or undone. */
+  select(moduleId: string | null): void {
+    if (this.selected === moduleId) return;
+    this.selected = moduleId;
+    this.emit();
+  }
+
+  private setPatch(next: Patch): void {
     this.patch = next;
+    if (this.selected && !next.modules.some((m) => m.id === this.selected)) this.selected = null;
     this.emit();
     this.persist();
   }
@@ -52,15 +106,22 @@ export class AppStore {
   async open(id: string): Promise<void> {
     const raw = await this.storage.load(id);
     if (!raw) return;
-    this.patch = deserializePatch(raw, getDef);
-    this.emit();
+    this.replace(deserializePatch(raw, getDef));
     void this.save();
   }
 
   newPatch(): void {
-    this.patch = defaultPatch(getDef);
-    this.emit();
+    this.replace(defaultPatch(getDef));
     void this.save();
+  }
+
+  /** Switch to a different patch, clearing undo history and selection. */
+  private replace(patch: Patch): void {
+    this.patch = patch;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.selected = null;
+    this.emit();
   }
 
   private async save(): Promise<void> {

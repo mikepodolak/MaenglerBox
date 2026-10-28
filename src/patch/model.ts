@@ -25,6 +25,7 @@ export function defaultParams(def: ModuleDef): Record<string, number> {
 
 export function addModule(patch: Patch, def: ModuleDef, x = 0, y = 0, id = newId(def.type)): [Patch, ModuleInstance] {
   const mod: ModuleInstance = { id, type: def.type, x, y, params: defaultParams(def) };
+  if (def.data) mod.data = def.data.create();
   return [touch(patch, { modules: [...patch.modules, mod] }), mod];
 }
 
@@ -47,6 +48,14 @@ export function setParam(patch: Patch, defs: DefLookup, moduleId: string, paramI
   return touch(patch, {
     modules: patch.modules.map((m) => (m.id === moduleId ? { ...m, params: { ...m.params, [paramId]: clamped } } : m)),
   });
+}
+
+export function setModuleData(patch: Patch, defs: DefLookup, moduleId: string, data: unknown): Patch {
+  const mod = findModule(patch, moduleId);
+  const dataDef = defs(mod.type)?.data;
+  if (!dataDef) throw new PatchError(`${mod.type} has no data`);
+  const clean = dataDef.normalize(data);
+  return touch(patch, { modules: patch.modules.map((m) => (m.id === moduleId ? { ...m, data: clean } : m)) });
 }
 
 /** Which output kinds may feed which input kinds. Audio and CV are interchangeable signals. */
@@ -112,7 +121,9 @@ export function deserializePatch(json: unknown, defs: DefLookup): Patch {
         if (typeof v === 'number' && Number.isFinite(v)) params[p.id] = Math.min(p.max, Math.max(p.min, v));
       }
     }
-    modules.push({ id: m.id, type: m.type, x: num(m.x), y: num(m.y), params });
+    const mod: ModuleInstance = { id: m.id, type: m.type, x: num(m.x), y: num(m.y), params };
+    if (def.data) mod.data = def.data.normalize(m.data);
+    modules.push(mod);
   }
   let patch: Patch = {
     version: 1,

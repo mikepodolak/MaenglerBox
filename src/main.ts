@@ -11,5 +11,8 @@ const store = new AppStore();
 const engine = new AudioEngine();
 const app = new App(document.getElementById('app')!, store, engine);
 
+// Handy for debugging from the browser console and for automated smoke tests.
+(window as unknown as { maenglerbox: unknown }).maenglerbox = { store, engine };
+
 void store.init().then(() => app.mount());
 void requestPersistentStorage();
