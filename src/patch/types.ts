@@ -50,7 +50,16 @@ export interface ModuleDef {
   /** Optional named groups for the inspector, in order. Params not listed go in a trailing group. */
   groups?: { label: string; params: string[] }[];
   data?: ModuleDataDef;
+  /**
+   * Where the module's preset slots live. 'library' (the default) shares them
+   * across every patch on the device; 'patch' keeps them inside the patch
+   * (a sequencer's pattern bank belongs to its song).
+   */
+  presetScope?: 'library' | 'patch';
 }
+
+/** Shared preset banks, one per module type. */
+export type PresetLibrary = Record<string, (Preset | null)[]>;
 
 export interface ModuleInstance {
   id: string;

@@ -1,8 +1,11 @@
-import type { Patch } from '../patch/types';
+import { normalizePresets } from '../patch/presets';
+import type { Patch, Preset, PresetLibrary } from '../patch/types';
 
 const DB_NAME = 'maenglerbox';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const PATCHES = 'patches';
+/** Shared preset banks, one record per module type. */
+const LIBRARY = 'library';
 const LAST_PATCH_KEY = 'maenglerbox:lastPatch';
 
 export interface PatchSummary {
@@ -23,6 +26,7 @@ export class PatchStore {
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(PATCHES)) db.createObjectStore(PATCHES, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(LIBRARY)) db.createObjectStore(LIBRARY, { keyPath: 'type' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -30,11 +34,15 @@ export class PatchStore {
     return this.dbPromise;
   }
 
-  private async run<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  private async run<T>(
+    mode: IDBTransactionMode,
+    fn: (store: IDBObjectStore) => IDBRequest<T>,
+    storeName = PATCHES,
+  ): Promise<T> {
     const db = await this.db();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(PATCHES, mode);
-      const req = fn(tx.objectStore(PATCHES));
+      const tx = db.transaction(storeName, mode);
+      const req = fn(tx.objectStore(storeName));
       tx.oncomplete = () => resolve(req.result);
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
@@ -59,6 +67,21 @@ export class PatchStore {
 
   async remove(id: string): Promise<void> {
     await this.run('readwrite', (s) => s.delete(id));
+  }
+
+  /** Every shared preset bank on the device, by module type. */
+  async loadLibrary(): Promise<PresetLibrary> {
+    const rows = (await this.run('readonly', (s) => s.getAll(), LIBRARY)) as { type?: unknown; presets?: unknown }[];
+    const lib: PresetLibrary = {};
+    for (const r of rows) {
+      const presets = typeof r.type === 'string' ? normalizePresets(r.presets) : undefined;
+      if (presets) lib[r.type as string] = presets;
+    }
+    return lib;
+  }
+
+  async saveBank(type: string, presets: (Preset | null)[]): Promise<void> {
+    await this.run('readwrite', (s) => s.put({ type, presets }), LIBRARY);
   }
 
   lastPatchId(): string | null {

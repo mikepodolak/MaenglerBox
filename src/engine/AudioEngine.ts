@@ -1,5 +1,5 @@
 import { allWorklets, getModuleType } from '../modules/registry';
-import type { Patch } from '../patch/types';
+import type { Patch, PresetLibrary } from '../patch/types';
 import { PatchRuntime } from './PatchRuntime';
 import { Scheduler } from './Scheduler';
 
@@ -15,6 +15,7 @@ export class AudioEngine {
   private runtime: PatchRuntime | null = null;
   private scheduler: Scheduler | null = null;
   private pending: Patch | null = null;
+  private library: PresetLibrary = {};
   private worklets: Promise<void> = Promise.resolve();
   private analyser: AnalyserNode | null = null;
   private listeners = new Set<(s: EngineState) => void>();
@@ -64,6 +65,7 @@ export class AudioEngine {
       return;
     }
     this.scheduler!.start();
+    this.runtime!.setLibrary(this.library);
     if (this.pending) this.runtime!.sync(this.pending);
     this.setState(this.ctx.state === 'running' ? 'running' : 'suspended');
   }
@@ -74,8 +76,10 @@ export class AudioEngine {
   }
 
   /** Apply the latest patch. Safe to call before audio has started. */
-  sync(patch: Patch): void {
+  sync(patch: Patch, library: PresetLibrary = {}): void {
     this.pending = patch;
+    this.library = library;
+    this.runtime?.setLibrary(library);
     this.runtime?.sync(patch);
   }
 

@@ -2,8 +2,17 @@ import type { AppStore } from '../app/store';
 import { getDef } from '../modules/registry';
 import { noteName, randomizeSteps, STEP_FIELDS, type SequencerData, type Step, type StepField } from '../modules/sequencer';
 import { removeModule, setModuleData, setParam } from '../patch/model';
-import { clearPreset, PRESET_SLOTS, randomizeParams, recallPreset, savePreset, setLocked } from '../patch/presets';
-import type { ModuleInstance, ParamDef } from '../patch/types';
+import {
+  applyPreset,
+  capturePreset,
+  clearPreset,
+  PRESET_SLOTS,
+  randomizeParams,
+  savePreset,
+  setLocked,
+  usesLibrary,
+} from '../patch/presets';
+import type { ModuleInstance, ParamDef, Preset } from '../patch/types';
 import { paramControl, type ParamControl } from './controls';
 import { h } from './dom';
 
@@ -70,7 +79,7 @@ export class Inspector {
     ];
 
     this.steps = m.type === 'sequencer' ? new StepEditor(this.store, m.id) : null;
-    this.presets = new PresetPanel(this.store, m.id, m.type === 'sequencer' ? 'Patterns' : 'Presets');
+    this.presets = new PresetPanel(this.store, m.id, m.type === 'sequencer' ? 'Patterns' : 'Presets', usesLibrary(def));
     const mutateAmount = h('input', { type: 'range', min: 1, max: 50, step: 1, 'aria-label': 'Mutate amount' });
     mutateAmount.value = '15';
     const randomizeBar = h(
@@ -125,7 +134,8 @@ type SlotAction = 'load' | 'save' | 'clear';
 
 /**
  * 16 numbered slots. Pick an action, then tap a slot. On a sequencer these are
- * its pattern bank; on a synth, its presets (which step values can call up).
+ * its pattern bank, saved in the patch. On a synth they're its presets (which
+ * step values can call up), shared by every patch through the library.
  */
 class PresetPanel {
   readonly el = h('section', { class: 'presets' });
@@ -138,6 +148,7 @@ class PresetPanel {
     private readonly store: AppStore,
     private readonly moduleId: string,
     title: string,
+    private readonly shared: boolean,
   ) {
     const actions = h('div', { class: 'segmented small', role: 'group', 'aria-label': `${title} action` });
     for (const [a, label] of [['load', 'Load'], ['save', 'Save'], ['clear', 'Clear']] as const) {
@@ -156,7 +167,17 @@ class PresetPanel {
       this.slots.push(b);
       grid.append(b);
     }
-    this.el.append(h('div', { class: 'presets-head' }, h('h3', {}, title), actions), grid);
+    this.el.append(
+      h('div', { class: 'presets-head' }, h('h3', {}, title), actions),
+      grid,
+    );
+    if (shared) this.el.append(h('p', { class: 'hint' }, 'Shared by every patch on this device.'));
+  }
+
+  private bank(): readonly (Preset | null)[] {
+    const m = this.module;
+    if (!m) return [];
+    return (this.shared ? this.store.library[m.type] : m.presets) ?? [];
   }
 
   update(m: ModuleInstance): void {
@@ -165,16 +186,21 @@ class PresetPanel {
   }
 
   private tap(slot: number): void {
-    const filled = this.module?.presets?.[slot];
+    const m = this.module;
+    if (!m) return;
+    const filled = this.bank()[slot];
     if (this.action === 'load') {
-      if (filled) this.store.update((p) => recallPreset(p, getDef, this.moduleId, slot));
+      if (filled) this.store.update((p) => applyPreset(p, getDef, this.moduleId, filled));
     } else if (this.action === 'save') {
-      const name = window.prompt('Name this slot', filled?.name ?? `${slot + 1}`);
-      if (name === null) return;
-      this.store.update((p) => savePreset(p, this.moduleId, slot, name.trim() || `${slot + 1}`));
+      const input = window.prompt('Name this slot', filled?.name ?? `${slot + 1}`);
+      if (input === null) return;
+      const name = input.trim() || `${slot + 1}`;
+      if (this.shared) this.store.setLibrarySlot(m.type, slot, capturePreset(m, name));
+      else this.store.update((p) => savePreset(p, this.moduleId, slot, name));
       this.action = 'load';
     } else if (filled) {
-      this.store.update((p) => clearPreset(p, this.moduleId, slot));
+      if (this.shared) this.store.setLibrarySlot(m.type, slot, null);
+      else this.store.update((p) => clearPreset(p, this.moduleId, slot));
     }
     this.paint();
   }
@@ -183,7 +209,7 @@ class PresetPanel {
     for (const [a, b] of this.actionBtns) b.setAttribute('aria-pressed', String(a === this.action));
     this.el.dataset.action = this.action;
     this.slots.forEach((b, i) => {
-      const p = this.module?.presets?.[i];
+      const p = this.bank()[i];
       b.classList.toggle('filled', !!p);
       b.replaceChildren(h('span', { class: 'slot-num' }, String(i + 1)), h('span', { class: 'slot-name' }, p?.name ?? ''));
       b.setAttribute('aria-label', `Slot ${i + 1}${p ? `: ${p.name}` : ', empty'}`);

@@ -1,6 +1,6 @@
 import { findModule, PatchError, type DefLookup } from './model';
 import { fromNormalized, toNormalized } from './params';
-import type { ModuleInstance, Patch, Preset } from './types';
+import type { ModuleDef, ModuleInstance, Patch, Preset } from './types';
 
 /** Slots per module, M8-style. */
 export const PRESET_SLOTS = 16;
@@ -14,24 +14,46 @@ function checkSlot(slot: number): void {
   if (!Number.isInteger(slot) || slot < 0 || slot >= PRESET_SLOTS) throw new PatchError(`No preset slot ${slot + 1}`);
 }
 
-/** Store the module's current settings in a slot. */
-export function savePreset(patch: Patch, moduleId: string, slot: number, name?: string): Patch {
-  checkSlot(slot);
-  return updateModule(patch, moduleId, (m) => {
-    const presets = [...(m.presets ?? [])];
-    while (presets.length < PRESET_SLOTS) presets.push(null);
-    presets[slot] = { name: name ?? presets[slot]?.name ?? `Preset ${slot + 1}`, params: { ...m.params }, data: m.data };
-    return { ...m, presets };
-  });
+/** True when a module type keeps its presets in the shared library rather than the patch. */
+export function usesLibrary(def: ModuleDef | undefined): boolean {
+  return (def?.presetScope ?? 'library') === 'library';
 }
 
-/** Load a slot's settings into the module. Empty slots do nothing. */
+/** A preset holding the module's current settings. */
+export function capturePreset(m: ModuleInstance, name: string): Preset {
+  const preset: Preset = { name, params: { ...m.params } };
+  if (m.data !== undefined) preset.data = m.data;
+  return preset;
+}
+
+/** A copy of a bank with one slot replaced (null empties it). */
+export function setSlot(bank: readonly (Preset | null)[] | undefined, slot: number, preset: Preset | null): (Preset | null)[] {
+  checkSlot(slot);
+  const next = [...(bank ?? [])];
+  while (next.length < PRESET_SLOTS) next.push(null);
+  next[slot] = preset;
+  return next;
+}
+
+/** Store the module's current settings in one of its own (in-patch) slots. */
+export function savePreset(patch: Patch, moduleId: string, slot: number, name?: string): Patch {
+  checkSlot(slot);
+  return updateModule(patch, moduleId, (m) => ({
+    ...m,
+    presets: setSlot(m.presets, slot, capturePreset(m, name ?? m.presets?.[slot]?.name ?? `Preset ${slot + 1}`)),
+  }));
+}
+
+/** Load a slot of the module's own (in-patch) bank. Empty slots do nothing. */
 export function recallPreset(patch: Patch, defs: DefLookup, moduleId: string, slot: number): Patch {
   checkSlot(slot);
-  const m = findModule(patch, moduleId);
-  const preset = m.presets?.[slot];
-  if (!preset) return patch;
-  const def = defs(m.type);
+  const preset = findModule(patch, moduleId).presets?.[slot];
+  return preset ? applyPreset(patch, defs, moduleId, preset) : patch;
+}
+
+/** Load a preset's settings into a module, from any bank. */
+export function applyPreset(patch: Patch, defs: DefLookup, moduleId: string, preset: Preset): Patch {
+  const def = defs(findModule(patch, moduleId).type);
   return updateModule(patch, moduleId, (mod) => ({
     ...mod,
     params: { ...mod.params, ...presetParams(preset, mod.params) },
@@ -41,11 +63,7 @@ export function recallPreset(patch: Patch, defs: DefLookup, moduleId: string, sl
 
 export function clearPreset(patch: Patch, moduleId: string, slot: number): Patch {
   checkSlot(slot);
-  return updateModule(patch, moduleId, (m) => {
-    const presets = [...(m.presets ?? [])];
-    presets[slot] = null;
-    return { ...m, presets };
-  });
+  return updateModule(patch, moduleId, (m) => ({ ...m, presets: setSlot(m.presets, slot, null) }));
 }
 
 export function renamePreset(patch: Patch, moduleId: string, slot: number, name: string): Patch {
@@ -116,7 +134,8 @@ export function normalizePresets(raw: unknown, normalizeData?: (d: unknown) => u
     const params: Record<string, number> = {};
     for (const [k, v] of Object.entries(r.params)) if (typeof v === 'number' && Number.isFinite(v)) params[k] = v;
     const preset: Preset = { name: typeof r.name === 'string' ? r.name.slice(0, 40) : 'Preset', params };
-    if (r.data !== undefined && normalizeData) preset.data = normalizeData(r.data);
+    // Without a normalizer the data is kept as is; applyPreset normalizes it on load.
+    if (r.data !== undefined) preset.data = normalizeData ? normalizeData(r.data) : r.data;
     return preset;
   });
 }

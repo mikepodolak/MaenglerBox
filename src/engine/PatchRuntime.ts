@@ -1,9 +1,10 @@
 import type { EngineEnv, InputTarget, ModuleType, OutputSource, RuntimeModule } from '../modules/types';
-import type { Cable, ModuleInstance, Patch } from '../patch/types';
+import type { Cable, ModuleInstance, Patch, Preset, PresetLibrary } from '../patch/types';
 
 interface LiveModule {
   instance: ModuleInstance;
   runtime: RuntimeModule;
+  presets: (Preset | null)[] | undefined;
 }
 
 /**
@@ -14,11 +15,21 @@ interface LiveModule {
 export class PatchRuntime {
   private modules = new Map<string, LiveModule>();
   private cables = new Map<string, () => void>();
+  private library: PresetLibrary = {};
 
   constructor(
     private readonly env: EngineEnv,
     private readonly lookup: (type: string) => ModuleType | undefined,
   ) {}
+
+  /** The shared preset banks. Modules whose presets live in the library read theirs from here. */
+  setLibrary(library: PresetLibrary): void {
+    this.library = library;
+  }
+
+  private presetsFor(instance: ModuleInstance, type: ModuleType): (Preset | null)[] | undefined {
+    return (type.def.presetScope ?? 'library') === 'library' ? this.library[instance.type] : instance.presets;
+  }
 
   sync(patch: Patch): void {
     const wantedModules = new Set(patch.modules.map((m) => m.id));
@@ -43,15 +54,23 @@ export class PatchRuntime {
         const type = this.lookup(instance.type);
         if (!type) continue;
         const runtime = type.create(this.env, { ...instance.params }, instance.data);
-        if (instance.presets) runtime.setPresets?.(instance.presets);
-        this.modules.set(instance.id, { instance, runtime });
-      } else if (live.instance !== instance) {
+        const presets = this.presetsFor(instance, type);
+        if (presets) runtime.setPresets?.(presets);
+        this.modules.set(instance.id, { instance, runtime, presets });
+        continue;
+      }
+      if (live.instance !== instance) {
         for (const [k, v] of Object.entries(instance.params)) {
           if (live.instance.params[k] !== v) live.runtime.setParam(k, v);
         }
         if (live.instance.data !== instance.data) live.runtime.setData?.(instance.data);
-        if (live.instance.presets !== instance.presets) live.runtime.setPresets?.(instance.presets ?? []);
         live.instance = instance;
+      }
+      const type = this.lookup(instance.type);
+      const presets = type && this.presetsFor(instance, type);
+      if (presets !== live.presets) {
+        live.runtime.setPresets?.(presets ?? []);
+        live.presets = presets;
       }
     }
 

@@ -1,7 +1,8 @@
 import { getDef } from '../modules/registry';
 import { createPatch, deserializePatch } from '../patch/model';
 import { defaultPatch } from '../patch/defaultPatch';
-import type { Patch } from '../patch/types';
+import { setSlot } from '../patch/presets';
+import type { Patch, Preset, PresetLibrary } from '../patch/types';
 import { debounce, PatchStore } from '../storage/patchStore';
 
 export type SaveState = 'saved' | 'saving' | 'error';
@@ -39,6 +40,8 @@ export class AppStore {
   saveState: SaveState = 'saved';
   selected: string | null = null;
   prefs: Prefs = loadPrefs();
+  /** Shared preset banks, the same in every patch. Not part of undo. */
+  library: PresetLibrary = {};
   private undoStack: Patch[] = [];
   private redoStack: Patch[] = [];
   private lastCoalesce: string | undefined;
@@ -50,6 +53,11 @@ export class AppStore {
 
   /** Reopen the last patch, or start from the default one. */
   async init(): Promise<void> {
+    try {
+      this.library = await this.storage.loadLibrary();
+    } catch (e) {
+      console.warn('Could not load the preset library', e);
+    }
     const lastId = this.storage.lastPatchId();
     if (lastId) {
       try {
@@ -124,6 +132,18 @@ export class AppStore {
       // Not remembered across visits, but still applies now.
     }
     this.emit();
+  }
+
+  /** Put a preset in (or, with null, empty) a slot of a module type's shared bank. */
+  setLibrarySlot(type: string, slot: number, preset: Preset | null): void {
+    const bank = setSlot(this.library[type], slot, preset);
+    this.library = { ...this.library, [type]: bank };
+    this.emit();
+    this.storage.saveBank(type, bank).catch((e) => {
+      console.error('Saving the preset library failed', e);
+      this.saveState = 'error';
+      this.emit();
+    });
   }
 
   /** UI selection lives here so every view agrees on it. It isn't saved or undone. */

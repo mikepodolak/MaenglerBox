@@ -234,6 +234,7 @@ export const sequencer: ModuleType = {
     ],
     face: ['density', 'pitchRandom'],
     data: sequencerData as ModuleDataDef,
+    presetScope: 'patch',
   },
   create(_env, params, data) {
     const out = new GateOutput();
