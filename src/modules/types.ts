@@ -1,6 +1,6 @@
 import type { GateHandler, GateOutput } from '../engine/gate';
 import type { Scheduler } from '../engine/Scheduler';
-import type { ModuleDef } from '../patch/types';
+import type { ModuleDef, Preset } from '../patch/types';
 
 /** Where a cable lands on a module's input. */
 export type InputTarget =
@@ -18,6 +18,8 @@ export interface RuntimeModule {
   setParam(id: string, value: number): void;
   /** Receives the module's structured data whenever it changes. */
   setData?(data: unknown): void;
+  /** Receives the module's saved presets whenever they change. */
+  setPresets?(presets: (Preset | null)[]): void;
   /** Live state for the UI (like a sequencer's playhead) as of audio time `now`. */
   getState?(now: number): unknown;
   dispose(): void;

@@ -33,6 +33,13 @@ Patches are saved on the device (IndexedDB).
 - Undo and redo cover every edit (⌘Z / ⇧⌘Z on a keyboard).
 
 Ports carry three kinds of signal: **audio**, **cv** (modulation) and **gate** (timed events like triggers and notes).
+## Presets, patterns and randomizing
+
+- Every module has 16 slots. Pick **Load**, **Save** or **Clear**, then tap a slot. On a sequencer the slots are its pattern bank.
+- **Randomize** sets every setting to a random value; **Mutate** nudges each one by the amount slider. Tap a padlock to keep that setting.
+- In the sequencer, **Randomize pattern** and **Mutate pattern** rewrite the steps, keeping notes in the chosen scale. The **Keep** buttons protect a step field (notes, chance, …) from both.
+- A step's **Preset** value makes the synth it plays play that note with the matching preset, so one FM voice can be a kick on step 1 and a snare on step 5.
+
 Audio and CV can be patched into each other; gates only connect to gates.
 
 ## Roadmap

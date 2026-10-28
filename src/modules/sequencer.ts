@@ -18,10 +18,17 @@ export interface Step {
   ratchet: number;
   /** Gate length as a fraction of the step (or ratchet slice). */
   length: number;
+  /** Number sent with the step's notes, 0 = none. A synth uses 1–16 to pick a preset for that note. */
+  send: number;
 }
+
+export const STEP_FIELDS = ['on', 'note', 'velocity', 'chance', 'ratchet', 'length', 'send'] as const;
+export type StepField = (typeof STEP_FIELDS)[number];
 
 export interface SequencerData {
   steps: Step[];
+  /** Step fields that randomize and mutate leave alone. */
+  locks?: StepField[];
 }
 
 export const SCALES: { name: string; intervals: number[] }[] = [
@@ -37,14 +44,14 @@ export const SCALES: { name: string; intervals: number[] }[] = [
 export function defaultStep(i: number): Step {
   // A sparse starting groove so the first patch is already musical.
   const on = [0, 3, 6, 8, 11, 14].includes(i % 16);
-  return { on, note: 48 + ([0, 7, 3, 12, 10, 5][i % 6] ?? 0), velocity: 0.8, chance: i % 4 === 0 ? 1 : 0.7, ratchet: 1, length: 0.5 };
+  return { on, note: 48 + ([0, 7, 3, 12, 10, 5][i % 6] ?? 0), velocity: 0.8, chance: i % 4 === 0 ? 1 : 0.7, ratchet: 1, length: 0.5, send: 0 };
 }
 
 const clamp = (v: unknown, lo: number, hi: number, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 
 export const sequencerData: ModuleDataDef<SequencerData> = {
-  create: () => ({ steps: Array.from({ length: MAX_STEPS }, (_, i) => defaultStep(i)) }),
+  create: () => ({ steps: Array.from({ length: MAX_STEPS }, (_, i) => defaultStep(i)), locks: [] }),
   normalize(raw) {
     const src = typeof raw === 'object' && raw !== null && Array.isArray((raw as SequencerData).steps) ? (raw as SequencerData).steps : [];
     return {
@@ -59,11 +66,57 @@ export const sequencerData: ModuleDataDef<SequencerData> = {
           chance: clamp(s.chance, 0, 1, d.chance),
           ratchet: Math.round(clamp(s.ratchet, 1, 4, d.ratchet)),
           length: clamp(s.length, 0.05, 1, d.length),
+          send: Math.round(clamp(s.send, 0, 16, d.send)),
         };
       }),
+      locks: Array.isArray((raw as SequencerData | null)?.locks)
+        ? STEP_FIELDS.filter((f) => (raw as SequencerData).locks!.includes(f))
+        : [],
     };
   },
 };
+
+export interface StepRandomizeOptions {
+  /** 1 = fully random; below 1 = mutate by up to this fraction of each field's range. */
+  amount: number;
+  /** Only these step indices; default is the whole pattern up to `length`. */
+  steps?: number[];
+  length?: number;
+  scale?: number;
+  root?: number;
+  random?: () => number;
+}
+
+/** Randomize or mutate steps, skipping locked fields. Notes stay in the sequencer's scale. */
+export function randomizeSteps(data: SequencerData, opts: StepRandomizeOptions): SequencerData {
+  const rnd = opts.random ?? Math.random;
+  const amount = Math.min(1, Math.max(0, opts.amount));
+  const full = amount >= 1;
+  const locks = new Set(data.locks ?? []);
+  const len = opts.length ?? MAX_STEPS;
+  const targets = new Set(opts.steps ?? Array.from({ length: len }, (_, i) => i));
+  const scale = (SCALES[Math.round(opts.scale ?? 0)] ?? SCALES[0]).intervals;
+  const root = Math.round(opts.root ?? 0);
+  const cont = (v: number, lo: number, hi: number) =>
+    Math.min(hi, Math.max(lo, full ? lo + rnd() * (hi - lo) : v + (rnd() * 2 - 1) * amount * (hi - lo)));
+
+  const steps = data.steps.map((s, i) => {
+    if (!targets.has(i)) return s;
+    const n = { ...s };
+    if (!locks.has('on') && rnd() < (full ? 1 : amount / 2)) n.on = rnd() < 0.5;
+    if (!locks.has('note')) {
+      const raw = full ? 36 + root + Math.floor(rnd() * 25) : s.note + Math.round((rnd() * 2 - 1) * amount * 12);
+      n.note = Math.min(127, Math.max(0, quantize(raw, scale, root)));
+    }
+    if (!locks.has('velocity')) n.velocity = cont(s.velocity, 0.2, 1);
+    if (!locks.has('chance')) n.chance = cont(s.chance, 0.1, 1);
+    if (!locks.has('length')) n.length = cont(s.length, 0.05, 1);
+    // Ratchets are a spice: mostly single hits even when fully random.
+    if (!locks.has('ratchet') && rnd() < (full ? 1 : amount / 2)) n.ratchet = rnd() < 0.7 ? 1 : 2 + Math.floor(rnd() * 3);
+    return n;
+  });
+  return { ...data, steps };
+}
 
 /** Snap a note to the nearest degree of a scale rooted at `root` (pitch class). */
 export function quantize(note: number, scale: number[], root = 0): number {
@@ -132,6 +185,7 @@ export class SequencerCore {
         value: step.velocity * (r === 0 ? 1 : 0.85),
         length: Math.max(0.005, slice * step.length),
         note,
+        index: step.send || undefined,
       });
     }
     return events;

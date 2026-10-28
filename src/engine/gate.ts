@@ -7,6 +7,8 @@ export interface GateEvent {
   length: number;
   /** Optional pitch in MIDI note numbers, for note-carrying gates. */
   note?: number;
+  /** Optional plain number riding with the event, e.g. which preset a synth should use (1-based). */
+  index?: number;
 }
 
 export type GateHandler = (event: GateEvent) => void;

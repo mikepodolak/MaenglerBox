@@ -1,3 +1,4 @@
+import { normalizePresets } from './presets';
 import type { Cable, ModuleDef, ModuleInstance, Patch, PortDef, PortKind, PortRef } from './types';
 
 /** Lookup for module definitions; the patch model never touches audio. */
@@ -123,6 +124,9 @@ export function deserializePatch(json: unknown, defs: DefLookup): Patch {
     }
     const mod: ModuleInstance = { id: m.id, type: m.type, x: num(m.x), y: num(m.y), params };
     if (def.data) mod.data = def.data.normalize(m.data);
+    const presets = normalizePresets(m.presets, def.data?.normalize);
+    if (presets) mod.presets = presets;
+    if (Array.isArray(m.locks)) mod.locks = m.locks.filter((id): id is string => typeof id === 'string' && id in params);
     modules.push(mod);
   }
   let patch: Patch = {

@@ -707,6 +707,189 @@ input[type='range'] {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- presets, randomize, locks ---- */
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  border-radius: 0;
+  min-width: 52px;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--accent);
+  color: #111;
+  font-weight: 600;
+}
+
+.segmented.small button {
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.presets {
+  margin: 4px 0 12px;
+}
+
+.presets-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.presets-head h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 44px;
+  padding: 4px 6px;
+  overflow: hidden;
+  text-align: left;
+  color: var(--muted);
+}
+
+.slot.filled {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.slot-num {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.slot-name {
+  font-size: 12px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.presets[data-action='save'] .slot {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.presets[data-action='clear'] .slot.filled {
+  border-color: var(--danger);
+}
+
+.randomize-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+
+.mutate-amount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 8em;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.mutate-amount input {
+  flex: 1;
+  min-width: 0;
+}
+
+.hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.param.lockable {
+  grid-template-columns: 7em 1fr 4.5em;
+}
+
+.param.lockable.choice {
+  grid-template-columns: 7em 1fr;
+}
+
+.param.lockable .param-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.param-label .lock {
+  min-height: 0;
+  padding: 0 4px 0 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  opacity: 0.35;
+}
+
+.param-label .lock.locked {
+  opacity: 1;
+}
+
+.send-row {
+  display: grid;
+  grid-template-columns: 5.5em 1fr 1.4fr 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.send-row button {
+  padding: 4px;
+  min-height: 36px;
+}
+
+.field-locks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.field-locks button {
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.field-locks button[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---- palette ---- */
 
 .palette li button {

@@ -59,6 +59,16 @@ export interface ModuleInstance {
   y: number;
   params: Record<string, number>;
   data?: unknown;
+  /** Saved snapshots of params (and data). Sparse: empty slots are null. */
+  presets?: (Preset | null)[];
+  /** Param ids that randomize and mutate leave alone. */
+  locks?: string[];
+}
+
+export interface Preset {
+  name: string;
+  params: Record<string, number>;
+  data?: unknown;
 }
 
 export interface PortRef {
