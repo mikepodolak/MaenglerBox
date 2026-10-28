@@ -25,8 +25,10 @@ Patches are saved on the device (IndexedDB).
 
 ## Using the canvas
 
+- **Edit / Play** switch in the toolbar. In Edit you move modules and patch cables. In Play the layout and cables are locked and tapping a module opens its settings. The ⚙ on each module opens settings in either mode.
 - Drag empty space to pan, pinch (or ctrl+scroll) to zoom. **Fit** brings everything into view.
-- Drag a module by its title bar. Tap a module to open its settings.
+- In Edit, drag a module by its title bar; it snaps to the dot grid when dropped.
+- The cable button (∿ / ⌐) switches between curved cables and tidy right-angle cables.
 - Drag from a jack to another jack to patch a cable. Drag a cable off an input to unplug it. Tap a cable to select it, then tap the red × to delete it.
 - Jack colours: orange is audio, teal is CV, yellow is gates and notes.
 - In the sequencer's step grid, tap a step to select it and tap it again to turn it on or off. The fill shows its chance of playing.

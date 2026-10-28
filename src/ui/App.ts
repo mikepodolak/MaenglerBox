@@ -15,6 +15,11 @@ export class App {
   private redoBtn = h('button', { class: 'icon-btn', 'aria-label': 'Redo', title: 'Redo' }, '↷');
   private nameInput = h('input', { class: 'patch-name', 'aria-label': 'Patch name' });
   private overlay = h('div', { class: 'start-overlay' });
+  private modeBtns = {
+    edit: h('button', { 'aria-pressed': 'false', title: 'Move modules and patch cables' }, 'Edit'),
+    play: h('button', { 'aria-pressed': 'false', title: 'Layout locked; tap a module to open its settings' }, 'Play'),
+  };
+  private cableBtn = h('button', { class: 'icon-btn', title: 'Cable style' });
 
   constructor(
     private readonly root: HTMLElement,
@@ -34,6 +39,11 @@ export class App {
       if (this.engine.state === 'running') void this.engine.suspend();
       else void this.engine.start();
     });
+    this.modeBtns.edit.addEventListener('click', () => this.store.setPref('mode', 'edit'));
+    this.modeBtns.play.addEventListener('click', () => this.store.setPref('mode', 'play'));
+    this.cableBtn.addEventListener('click', () =>
+      this.store.setPref('cableStyle', this.store.prefs.cableStyle === 'curved' ? 'square' : 'curved'),
+    );
     this.undoBtn.addEventListener('click', () => this.store.undo());
     this.redoBtn.addEventListener('click', () => this.store.redo());
     window.addEventListener('keydown', (e) => {
@@ -60,6 +70,8 @@ export class App {
       this.nameInput,
       this.saveEl,
       h('span', { class: 'spacer' }),
+      h('div', { class: 'segmented', role: 'group', 'aria-label': 'Canvas mode' }, this.modeBtns.edit, this.modeBtns.play),
+      this.cableBtn,
       this.undoBtn,
       this.redoBtn,
       h('button', { class: 'add-btn', onclick: () => this.openPalette() }, '+ Module'),
@@ -84,6 +96,13 @@ export class App {
     this.saveEl.dataset.state = this.store.saveState;
     this.undoBtn.disabled = !this.store.canUndo;
     this.redoBtn.disabled = !this.store.canRedo;
+    for (const mode of ['edit', 'play'] as const) {
+      this.modeBtns[mode].setAttribute('aria-pressed', String(this.store.prefs.mode === mode));
+    }
+    const square = this.store.prefs.cableStyle === 'square';
+    this.cableBtn.textContent = square ? '⌐' : '∿';
+    this.cableBtn.setAttribute('aria-label', square ? 'Cables: right-angle. Tap for curved' : 'Cables: curved. Tap for right-angle');
+    this.cableBtn.title = this.cableBtn.getAttribute('aria-label')!;
     this.canvas.render();
     this.inspector.render();
   }

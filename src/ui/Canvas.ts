@@ -11,6 +11,12 @@ const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2.5;
 /** Movement (px) below which a press counts as a tap rather than a drag. */
 const TAP_SLOP = 6;
+/** World grid that modules snap to when dropped. Matches the background dots. */
+export const GRID = 24;
+
+export const snap = (v: number) => Math.round(v / GRID) * GRID;
+
+type Point = { x: number; y: number };
 
 interface View {
   x: number;
@@ -33,7 +39,7 @@ interface JackInfo {
 }
 
 type Gesture =
-  | { kind: 'pan'; startX: number; startY: number; view: View; moved: boolean }
+  | { kind: 'pan'; startX: number; startY: number; view: View; moved: boolean; tapModule?: string }
   | { kind: 'pinch'; d0: number; zoom0: number; world: { x: number; y: number } }
   | { kind: 'module'; id: string; startX: number; startY: number; origX: number; origY: number; moved: boolean }
   | { kind: 'cable'; from: JackInfo; path: SVGPathElement };
@@ -71,6 +77,8 @@ export class Canvas {
   render(): void {
     const patch = this.store.patch;
     if (this.viewKey !== patch.id) this.loadView(patch);
+    this.el.dataset.mode = this.store.prefs.mode;
+    if (this.store.prefs.mode === 'play') this.selectedCable = null;
 
     for (const [id, card] of this.cards) {
       if (!patch.modules.some((m) => m.id === id)) {
@@ -170,7 +178,12 @@ export class Canvas {
     const el = h(
       'article',
       { class: `node node-${m.type}`, 'data-module': m.id },
-      h('header', { class: 'node-head' }, def.label),
+      h(
+        'header',
+        { class: 'node-head' },
+        h('span', { class: 'node-title' }, def.label),
+        h('button', { class: 'node-open', 'aria-label': `${def.label} settings`, title: 'Settings' }, '⚙'),
+      ),
       h(
         'div',
         { class: 'node-ports' },
@@ -221,13 +234,13 @@ export class Canvas {
       if (!a || !b) continue;
       const p1 = this.jackPos(a);
       const p2 = this.jackPos(b);
-      const d = cablePath(p1, p2);
+      const { d, mid } = this.route(p1, p2);
       const kind = jackInfo(a)?.kind ?? 'audio';
       const selected = c.id === this.selectedCable;
       const hit = svgEl('path', { d, class: 'cable-hit', 'data-cable': c.id });
       const line = svgEl('path', { d, class: `cable ${kind}${selected ? ' selected' : ''}` });
       frag.append(line, hit);
-      if (selected) frag.append(this.deleteHandle(c, p1, p2));
+      if (selected) frag.append(this.deleteHandle(c, mid));
     }
     // Keep an in-progress drag cable on top.
     const live = this.gesture?.kind === 'cable' ? this.gesture.path : null;
@@ -235,8 +248,11 @@ export class Canvas {
     if (live) this.svg.append(live);
   }
 
-  private deleteHandle(c: Cable, p1: { x: number; y: number }, p2: { x: number; y: number }): SVGElement {
-    const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 + sag(p1, p2) * 0.75 };
+  private route(a: Point, b: Point): { d: string; mid: Point } {
+    return this.store.prefs.cableStyle === 'square' ? squarePath(a, b) : curvedPath(a, b);
+  }
+
+  private deleteHandle(c: Cable, mid: Point): SVGElement {
     const g = svgEl('g', { class: 'cable-delete', 'data-delete-cable': c.id, transform: `translate(${mid.x} ${mid.y})` });
     g.append(svgEl('circle', { r: '14' }), svgEl('path', { d: 'M-5-5L5 5M5-5L-5 5' }));
     return g;
@@ -247,6 +263,24 @@ export class Canvas {
   private onDown(e: PointerEvent): void {
     const target = e.target as Element;
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    const play = this.store.prefs.mode === 'play';
+
+    // The settings button works in both modes.
+    const open = target.closest<HTMLElement>('.node-open');
+    if (open) {
+      this.store.select(open.closest<HTMLElement>('.node')!.dataset.module!);
+      return;
+    }
+
+    // Play mode: layout and cables are locked, and a tap on a module opens its settings.
+    // Dragging a module pans instead, so a swipe never opens a panel by accident.
+    if (play) {
+      const node = target.closest<HTMLElement>('.node');
+      if (node && !target.closest('.node-head, .node-ports, .seq-strip')) return;
+      this.startBackgroundGesture(e, node?.dataset.module);
+      return;
+    }
 
     const del = target.closest('[data-delete-cable]');
     if (del) {
@@ -280,13 +314,14 @@ export class Canvas {
       return;
     }
 
-    const node = target.closest<HTMLElement>('.node');
-    if (node) {
-      this.store.select(node.dataset.module!);
-      return;
-    }
+    // Edit mode: taps on a module body leave settings closed, so moving things never pops up a panel.
+    if (target.closest('.node')) return;
 
-    // Background: one finger pans, two pinch.
+    this.startBackgroundGesture(e);
+  }
+
+  /** Background: one finger pans, two pinch. */
+  private startBackgroundGesture(e: PointerEvent, tapModule?: string): void {
     this.el.setPointerCapture(e.pointerId);
     const bg = [...this.pointers.values()];
     if (bg.length >= 2 && (this.gesture?.kind === 'pan' || this.gesture?.kind === 'pinch' || !this.gesture)) {
@@ -294,7 +329,7 @@ export class Canvas {
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       this.gesture = { kind: 'pinch', d0: dist(a, b), zoom0: this.view.zoom, world: this.toWorld(mid.x, mid.y) };
     } else if (!this.gesture) {
-      this.gesture = { kind: 'pan', startX: e.clientX, startY: e.clientY, view: { ...this.view }, moved: false };
+      this.gesture = { kind: 'pan', startX: e.clientX, startY: e.clientY, view: { ...this.view }, moved: false, tapModule };
     }
   }
 
@@ -330,7 +365,7 @@ export class Canvas {
       if (!start) return;
       const p = this.toWorld(e.clientX, e.clientY);
       const s = this.jackPos(start);
-      g.path.setAttribute('d', g.from.side === 'out' ? cablePath(s, p) : cablePath(p, s));
+      g.path.setAttribute('d', (g.from.side === 'out' ? this.route(s, p) : this.route(p, s)).d);
       this.highlightTarget(e);
     }
   }
@@ -349,7 +384,9 @@ export class Canvas {
     this.gesture = null;
 
     if (g.kind === 'pan') {
-      if (!g.moved && !cancelled) {
+      if (!g.moved && !cancelled && g.tapModule) {
+        this.store.select(g.tapModule);
+      } else if (!g.moved && !cancelled) {
         this.store.select(null);
         this.selectedCable = null;
         this.drawCables();
@@ -358,12 +395,9 @@ export class Canvas {
     } else if (g.kind === 'module') {
       const card = this.cards.get(g.id)!;
       card.el.classList.remove('dragging');
-      if (!g.moved) {
-        this.store.select(g.id);
-        return;
-      }
-      const x = parseFloat(card.el.style.left);
-      const y = parseFloat(card.el.style.top);
+      if (!g.moved) return;
+      const x = snap(parseFloat(card.el.style.left));
+      const y = snap(parseFloat(card.el.style.top));
       this.store.update((p) => moveModule(p, g.id, x, y));
     } else if (g.kind === 'cable') {
       this.clearHighlights();
@@ -447,6 +481,9 @@ export class Canvas {
     this.view = v;
     this.world.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.zoom})`;
     this.el.style.setProperty('--zoom', String(v.zoom));
+    // The dot grid moves and scales with the world, so snapped modules sit on the dots.
+    this.el.style.backgroundSize = `${GRID * v.zoom}px ${GRID * v.zoom}px`;
+    this.el.style.backgroundPosition = `${v.x}px ${v.y}px`;
   }
 
   private toLocal(clientX: number, clientY: number): { x: number; y: number } {
@@ -503,14 +540,67 @@ function jackAt(x: number, y: number): JackInfo | null {
   return el ? jackInfo(el) : null;
 }
 
-function sag(a: { x: number; y: number }, b: { x: number; y: number }): number {
+function sag(a: Point, b: Point): number {
   return 24 + dist(a, b) * 0.12;
 }
 
-export function cablePath(a: { x: number; y: number }, b: { x: number; y: number }): string {
+/** A drooping cable, like a real patch cord. */
+export function curvedPath(a: Point, b: Point): { d: string; mid: Point } {
   const dx = Math.max(40, Math.abs(b.x - a.x) / 2);
   const s = sag(a, b);
-  return `M${a.x} ${a.y}C${a.x + dx} ${a.y + s} ${b.x - dx} ${b.y + s} ${b.x} ${b.y}`;
+  return {
+    d: `M${a.x} ${a.y}C${a.x + dx} ${a.y + s} ${b.x - dx} ${b.y + s} ${b.x} ${b.y}`,
+    mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + s * 0.75 },
+  };
+}
+
+/** Lead length out of a jack before a square cable turns. */
+const LEAD = 20;
+
+/**
+ * Right-angle routing: out of the jack to the right, across, and into the
+ * target from the left. Cables running backwards loop back between the jacks.
+ */
+export function squarePath(a: Point, b: Point): { d: string; mid: Point } {
+  let pts: Point[];
+  if (b.x >= a.x) {
+    const midX = (a.x + b.x) / 2;
+    pts = [a, { x: midX, y: a.y }, { x: midX, y: b.y }, b];
+  } else {
+    // Backwards: cross over halfway between the two jacks, which is usually the gap between
+    // rows of modules. When they sit at the same height, dip below instead.
+    const crossY = Math.abs(b.y - a.y) > 80 ? snapTo((a.y + b.y) / 2, GRID / 2) : Math.max(a.y, b.y) + 60;
+    pts = [a, { x: a.x + LEAD, y: a.y }, { x: a.x + LEAD, y: crossY }, { x: b.x - LEAD, y: crossY }, { x: b.x - LEAD, y: b.y }, b];
+  }
+  const midSeg = Math.floor((pts.length - 1) / 2);
+  const p = pts[midSeg];
+  const q = pts[midSeg + 1];
+  return { d: roundedPolyline(pts, 8), mid: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 } };
+}
+
+function snapTo(v: number, grid: number): number {
+  return Math.round(v / grid) * grid;
+}
+
+/** SVG path through points with corners rounded off. */
+export function roundedPolyline(pts: Point[], radius: number): string {
+  let d = `M${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const prev = pts[i - 1];
+    const cur = pts[i];
+    const next = pts[i + 1];
+    const r = Math.min(radius, dist(prev, cur) / 2, dist(cur, next) / 2);
+    const inPt = toward(cur, prev, r);
+    const outPt = toward(cur, next, r);
+    d += `L${inPt.x} ${inPt.y}Q${cur.x} ${cur.y} ${outPt.x} ${outPt.y}`;
+  }
+  const last = pts[pts.length - 1];
+  return `${d}L${last.x} ${last.y}`;
+}
+
+function toward(from: Point, to: Point, distance: number): Point {
+  const len = dist(from, to) || 1;
+  return { x: from.x + ((to.x - from.x) / len) * distance, y: from.y + ((to.y - from.y) / len) * distance };
 }
 
 function svgEl(tag: string, attrs: Record<string, string>): SVGElement {

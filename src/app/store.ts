@@ -6,6 +6,31 @@ import { debounce, PatchStore } from '../storage/patchStore';
 
 export type SaveState = 'saved' | 'saving' | 'error';
 
+/**
+ * Per-device UI preferences, kept out of the patch.
+ * - mode 'edit': move modules and patch cables; taps don't open settings.
+ * - mode 'play': layout and cables are locked; tapping a module opens its settings.
+ */
+export interface Prefs {
+  mode: 'edit' | 'play';
+  cableStyle: 'curved' | 'square';
+}
+
+const PREFS_KEY = 'maenglerbox:prefs';
+const DEFAULT_PREFS: Prefs = { mode: 'edit', cableStyle: 'curved' };
+
+function loadPrefs(): Prefs {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>;
+    return {
+      mode: raw.mode === 'play' ? 'play' : 'edit',
+      cableStyle: raw.cableStyle === 'square' ? 'square' : 'curved',
+    };
+  } catch {
+    return { ...DEFAULT_PREFS };
+  }
+}
+
 const HISTORY_LIMIT = 200;
 
 /** Holds the open patch, notifies views on change, and autosaves to the device. */
@@ -13,6 +38,7 @@ export class AppStore {
   patch: Patch = createPatch();
   saveState: SaveState = 'saved';
   selected: string | null = null;
+  prefs: Prefs = loadPrefs();
   private undoStack: Patch[] = [];
   private redoStack: Patch[] = [];
   private lastCoalesce: string | undefined;
@@ -87,6 +113,17 @@ export class AppStore {
     this.undoStack.push(this.patch);
     this.lastCoalesce = undefined;
     this.setPatch(next);
+  }
+
+  setPref<K extends keyof Prefs>(key: K, value: Prefs[K]): void {
+    if (this.prefs[key] === value) return;
+    this.prefs = { ...this.prefs, [key]: value };
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify(this.prefs));
+    } catch {
+      // Not remembered across visits, but still applies now.
+    }
+    this.emit();
   }
 
   /** UI selection lives here so every view agrees on it. It isn't saved or undone. */
