@@ -1366,20 +1366,37 @@ input[type='range'] {
 }
 
 .markov-grid .row-head.playing {
-  background: var(--accent);
+  background: #4fb3ff;
   color: var(--bg);
 }
 
+/* Dials, like Max's matrixctrl: an empty ring, filled by a circle as big as the weight. */
 .markov-grid .cell {
-  min-height: 26px;
+  position: relative;
+  min-height: 0;
   min-width: 0;
+  aspect-ratio: 1;
   padding: 0;
-  border-radius: 3px;
-  background: var(--panel-2);
+  border: none;
+  border-radius: 50%;
+  background: #2c2f35;
+  touch-action: none;
 }
 
-.markov-grid .cell.on {
-  background: rgb(255 138 61 / calc(0.25 + var(--w) * 0.75));
+.markov-grid .cell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: calc(var(--w, 0) * 92%);
+  height: calc(var(--w, 0) * 92%);
+  border-radius: 50%;
+  background: #4fb3ff;
+}
+
+.trig-picker button {
+  min-width: 30px;
+  padding: 6px 4px;
 }
 
 .markov-detail {

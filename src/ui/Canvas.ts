@@ -115,7 +115,7 @@ export class Canvas {
   static cardHeight(def: ModuleDef): number {
     const ports = Math.max(def.inputs.length, def.outputs.length) * 28;
     const face = (def.face ?? []).length * 30;
-    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' ? 190 : def.type === 'random' ? 60 : ['sequencer', 'markov', 'chance', 'sh'].includes(def.type) ? 40 : 0;
+    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' || def.type === 'markov' ? 190 : def.type === 'random' ? 60 : ['sequencer', 'chance', 'sh'].includes(def.type) ? 40 : 0;
     return 60 + ports + face + drawing;
   }
 

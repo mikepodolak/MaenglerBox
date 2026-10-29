@@ -145,15 +145,29 @@ export const HELP: Record<string, ModuleHelp> = {
     ],
   },
   markov: {
-    about: 'A first-order Markov chain, like the Max patch. Each row of the grid is a state with its own note; the cells in that row say how likely each next state is. On every clock the chain moves along those odds and plays the new note. Tap cells to make moves likelier, tap a row number to edit its note, how many clocks it stays, or make it a rest.',
+    about: 'A first-order Markov chain, like the Max matrixctrl → prob patches. Each row of the dial grid is a state; the circles in that row are the odds of moving to each column’s state next (bigger = likelier). On every clock the chain moves and plays the new state: its note, velocity and length, with its own chance of sounding. Each state can also fire one of eight Trig outputs, so the chain can route its states to different synths, like the TRIG column in the Max patch.',
     inputs: { clock: 'Takes one step through the chain.', reset: 'Back to state 1.' },
-    outputs: { notes: 'The current state’s note. It also carries the state number as a preset number, so states can pick FM presets.', state: 'Which state it is on, as a level 0..1.' },
-    settings: { size: 'How many states are in play (2–16).', gate: 'Note length as a fraction of a clock step.', transpose: 'Shifts every note.' },
+    outputs: {
+      notes: 'Every state that sounds, with its note and velocity. It also carries the state number as a preset number, so states can pick FM presets.',
+      state: 'Which state it is on, as a level 0..1.',
+      trig1: 'Fires when a state routed to Trig 1 sounds (likewise Trig 2–8).',
+    },
+    settings: {
+      size: 'How many states are in play (2–16).',
+      gate: 'Scales every state’s length.',
+      chance: 'Scales every state’s chance of sounding: one knob to thin the whole chain out.',
+      transpose: 'Shifts every note.',
+    },
     ideas: [
       {
         title: 'A melody with habits',
-        text: 'Start with Walk (each note goes to the next), then add a few side cells: from 4 back to 1, from 6 to 3. The tune follows the walk but takes your detours now and then.',
+        text: 'Start with Walk (each state goes to the next), then add a few side circles: from 4 back to 1, from 6 to 3. The tune follows the walk but takes your detours now and then.',
         recipe: { modules: { clock: CLOCK, self: { type: 'markov' }, fm: FM, out: OUT }, cables: ['clock.out > self.clock', 'self.notes > fm.gate', ...toSpeakers] },
+      },
+      {
+        title: 'One chain, two synths',
+        text: 'Out of the box, odd states fire Trig 1 and even states Trig 2. Patch each Trig to its own FM Voice and the chain hands the melody between two sounds. Tap a row number to route that state elsewhere.',
+        recipe: { modules: { clock: CLOCK, self: { type: 'markov' }, fm: FM, fm2: { type: 'fm', params: { algorithm: 5 } }, out: OUT }, cables: ['clock.out > self.clock', 'self.trig1 > fm.gate', 'self.trig2 > fm2.gate', ...toSpeakers, 'fm2.out > out.left', 'fm2.out > out.right'] },
       },
       { title: 'Balls drive it', text: 'Patch Bouncing Balls Floor into Clock: the chain only moves when a ball hits the floor.' },
     ],

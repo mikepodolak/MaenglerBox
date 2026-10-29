@@ -16,10 +16,7 @@ export interface Face {
 export function createFace(m: ModuleInstance): Face | null {
   if (m.type === 'sequencer') return sequencerFace();
   if (m.type === 'euclid') return euclidFace();
-  if (m.type === 'markov') return stripFace((m) => {
-    const d = m.data as MarkovData;
-    return d.states.slice(0, Math.round(m.params.size)).map((st) => (st.mute ? 0 : 0.6));
-  }, (s) => (s as { state?: number })?.state ?? -1);
+  if (m.type === 'markov') return markovFace();
   if (m.type === 'turing') return turingFace();
   if (m.type === 'random') return probabilityFace();
   if (m.type === 'chance') return chanceFace();
@@ -27,38 +24,6 @@ export function createFace(m: ModuleInstance): Face | null {
   if (m.type === 'balls') return ballsFace();
   if (m.type === 'life') return lifeFace();
   return null;
-}
-
-/** A row of cells with brightness from `levels` and the live one outlined. */
-function stripFace(levels: (m: ModuleInstance) => number[], current: (state: unknown) => number): Face {
-  const el = h('div', { class: 'seq-strip', 'aria-hidden': 'true' });
-  const cells: HTMLElement[] = [];
-  let last = -1;
-  return {
-    el,
-    update(m) {
-      const lv = levels(m);
-      while (cells.length < lv.length) {
-        const c = h('span', {});
-        cells.push(c);
-        el.append(c);
-      }
-      while (cells.length > lv.length) cells.pop()!.remove();
-      el.style.setProperty('--cols', String(Math.min(16, lv.length)));
-      cells.forEach((c, i) => {
-        c.classList.toggle('on', lv[i] > 0);
-        c.style.setProperty('--chance', String(lv[i]));
-      });
-      last = -1;
-    },
-    tick(state) {
-      const i = current(state);
-      if (i === last) return;
-      cells[last]?.classList.remove('playing');
-      cells[i]?.classList.add('playing');
-      last = i;
-    },
-  };
 }
 
 /** Four bars, as tall as their weights, in a neutral grey; the one just picked lights up. */
@@ -153,6 +118,63 @@ function holdFace(): Face {
         d.g.lineTo(px + step, py);
       });
       d.g.stroke();
+    },
+  };
+}
+
+/**
+ * The transition matrix as a grid of dials, like Max's matrixctrl in dial
+ * mode: each circle's size is the weight from its row's state to its
+ * column's. The row the chain is on is lit, and the move it just made glows.
+ */
+function markovFace(): Face {
+  const c = liveCanvas('markov-face', 1);
+  let data: MarkovData | null = null;
+  let size = 8;
+  let key = '';
+  let live = { state: -1, prev: -1 };
+  const draw = () => {
+    const k = `${live.state}:${live.prev}:${c.el.clientWidth}`;
+    if (k === key || !data) return;
+    key = k;
+    const d = c.begin();
+    if (!d) return;
+    const cell = d.w / size;
+    const max = Math.max(1, ...data.weights.slice(0, size).flatMap((r) => r.slice(0, size)));
+    if (live.state >= 0) {
+      d.g.fillStyle = 'rgba(79, 179, 255, 0.12)';
+      d.g.fillRect(0, live.state * cell, d.w, cell);
+    }
+    for (let r = 0; r < size; r++) {
+      for (let col = 0; col < size; col++) {
+        const w = data.weights[r][col];
+        const cx = col * cell + cell / 2;
+        const cy = r * cell + cell / 2;
+        d.g.fillStyle = '#2c2f35';
+        d.g.beginPath();
+        d.g.arc(cx, cy, cell * 0.42, 0, Math.PI * 2);
+        d.g.fill();
+        if (!w) continue;
+        const taken = r === live.prev && col === live.state;
+        d.g.fillStyle = taken ? '#9fd8ff' : r === live.state ? '#4fb3ff' : '#3b7fb0';
+        d.g.beginPath();
+        d.g.arc(cx, cy, cell * 0.42 * Math.sqrt(w / max), 0, Math.PI * 2);
+        d.g.fill();
+      }
+    }
+  };
+  return {
+    el: c.el,
+    update(m) {
+      data = m.data as MarkovData;
+      size = Math.round(m.params.size);
+      key = '';
+      requestAnimationFrame(draw);
+    },
+    tick(state) {
+      const s = state as { state?: number; prev?: number } | undefined;
+      live = { state: s?.state ?? -1, prev: s?.prev ?? -1 };
+      draw();
     },
   };
 }
