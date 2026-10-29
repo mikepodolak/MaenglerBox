@@ -1,6 +1,7 @@
 import type { AppStore } from '../app/store';
 import { getDef } from '../modules/registry';
-import { canConnect, connect, disconnect, MAX_CARD_WIDTH, MIN_CARD_WIDTH, moveModule, PatchError, resizeModule, setParam } from '../patch/model';
+import { MARKOV_LEVELS, type MarkovData } from '../modules/markov';
+import { canConnect, connect, disconnect, MAX_CARD_WIDTH, MIN_CARD_WIDTH, moveModule, PatchError, resizeModule, setModuleData, setParam } from '../patch/model';
 import { openHelp } from './help';
 import type { Cable, ModuleDef, ModuleInstance, Patch, PortKind, PortRef } from '../patch/types';
 import { paramControl, type ParamControl } from './controls';
@@ -12,6 +13,7 @@ const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2.5;
 /** Movement (px) below which a press counts as a tap rather than a drag. */
 const TAP_SLOP = 6;
+const LONG_PRESS_MS = 450;
 /** World grid that modules snap to when dropped. Matches the background dots. */
 export const GRID = 24;
 
@@ -46,7 +48,8 @@ type Gesture =
   | { kind: 'cable'; from: JackInfo; path: SVGPathElement }
   | { kind: 'resize'; id: string; startX: number; origW: number; moved: boolean }
   /** Play mode: a tap on a visual module's drawing shows or hides its jacks and controls. */
-  | { kind: 'reveal'; id: string; startX: number; startY: number; moved: boolean };
+  | { kind: 'reveal'; id: string; startX: number; startY: number; moved: boolean }
+  | { kind: 'cell'; id: string; r: number; c: number; w0: number; startX: number; startY: number; moved: boolean; done: boolean; timer: number };
 
 /**
  * The patching canvas. Modules are DOM cards on a pannable, zoomable world;
@@ -312,6 +315,10 @@ export class Canvas {
       return;
     }
 
+    // The Markov grid on the card is playable in both modes: tap or drag a dial like in its settings.
+    const markovFace = target.closest<HTMLElement>('.markov-face');
+    if (markovFace && this.startCellGesture(e, markovFace, play)) return;
+
     // Play mode: layout and cables are locked, and a tap on a module opens its settings.
     // Dragging a module pans instead, so a swipe never opens a panel by accident.
     if (play) {
@@ -373,6 +380,43 @@ export class Canvas {
     this.startBackgroundGesture(e);
   }
 
+  /** Start editing the Markov dial under the finger; a long press in Play mode shows the jacks instead. */
+  private startCellGesture(e: PointerEvent, face: HTMLElement, play: boolean): boolean {
+    const id = face.closest<HTMLElement>('.node')?.dataset.module;
+    const m = this.store.patch.modules.find((x) => x.id === id);
+    const data = m?.data as MarkovData | undefined;
+    if (!m || !data) return false;
+    const size = Math.round(m.params.size);
+    const rect = face.getBoundingClientRect();
+    const c = Math.floor(((e.clientX - rect.left) / rect.width) * size);
+    const r = Math.floor(((e.clientY - rect.top) / rect.height) * size);
+    if (r < 0 || c < 0 || r >= size || c >= size) return false;
+    e.preventDefault();
+    this.el.setPointerCapture(e.pointerId);
+    const g = { kind: 'cell' as const, id: m.id, r, c, w0: data.weights[r][c], startX: e.clientX, startY: e.clientY, moved: false, done: false, timer: 0 };
+    if (play) {
+      g.timer = window.setTimeout(() => {
+        if (g.moved || this.gesture !== g) return;
+        g.done = true;
+        if (this.revealed.has(g.id)) this.revealed.delete(g.id);
+        else this.revealed.add(g.id);
+        this.render();
+      }, LONG_PRESS_MS);
+    }
+    this.gesture = g;
+    return true;
+  }
+
+  private setCell(id: string, r: number, c: number, w: number): void {
+    this.store.update((p) => {
+      const m = p.modules.find((x) => x.id === id);
+      const data = m?.data as MarkovData | undefined;
+      if (!data) return p;
+      const weights = data.weights.map((row, i) => (i === r ? row.map((v, j) => (j === c ? w : v)) : row));
+      return setModuleData(p, getDef, id, { ...data, weights });
+    }, `markov:${id}:${r}:${c}`);
+  }
+
   /** Background: one finger pans, two pinch. */
   private startBackgroundGesture(e: PointerEvent, tapModule?: string): void {
     this.el.setPointerCapture(e.pointerId);
@@ -410,6 +454,12 @@ export class Canvas {
       this.drawCables();
     } else if (g.kind === 'reveal') {
       if (Math.hypot(e.clientX - g.startX, e.clientY - g.startY) > TAP_SLOP) g.moved = true;
+    } else if (g.kind === 'cell') {
+      if (g.done) return;
+      const dy = g.startY - e.clientY;
+      if (Math.abs(dy) > TAP_SLOP) g.moved = true;
+      // About 150px of travel sweeps the full range, as in the settings grid.
+      if (g.moved) this.setCell(g.id, g.r, g.c, Math.round(Math.min(100, Math.max(0, g.w0 + dy * (100 / 150)))));
     } else if (g.kind === 'module') {
       const dx = (e.clientX - g.startX) / this.view.zoom;
       const dy = (e.clientY - g.startY) / this.view.zoom;
@@ -459,6 +509,10 @@ export class Canvas {
       if (this.revealed.has(g.id)) this.revealed.delete(g.id);
       else this.revealed.add(g.id);
       this.render();
+    } else if (g.kind === 'cell') {
+      clearTimeout(g.timer);
+      // A tap steps through off, low, mid, high.
+      if (!g.moved && !g.done && !cancelled) this.setCell(g.id, g.r, g.c, MARKOV_LEVELS.find((l) => l > g.w0) ?? 0);
     } else if (g.kind === 'module') {
       const card = this.cards.get(g.id)!;
       card.el.classList.remove('dragging');

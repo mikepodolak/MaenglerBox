@@ -74,7 +74,7 @@ The module menu is grouped into Sequencing, Generative, Sound, Modulation and Ut
 - **Turing Machine**: a looping random melody that mutates by a chosen amount. It is drawn as a lit pad grid, one column per step.
 - **Sample & Hold**: random or drunk-walk values, sent out as CV and as notes.
 
-Every module has a **?** button that opens its help. The help covers what each jack carries, what the main settings do, and example patches you can add in one tap. Visual modules (Balls, Life, Euclidean, Turing) can be resized from their corner in Edit mode. In Play mode they show only their drawing; tap the drawing to show the jacks and controls.
+Every module has a **?** button that opens its help. The help covers what each jack carries, what the main settings do, and example patches you can add in one tap. Visual modules (Balls, Life, Euclidean, Turing, Markov, Probability, Chance Gate, Sample & Hold) can be resized from their corner in Edit mode. In Play mode they show only their drawing; tap the drawing to show the jacks and controls. The Markov grid stays playable on the card in both modes: tap a dial to step its weight, drag up or down to set it, and long-press it in Play mode to show the jacks.
 
 **Patches and recording.** Patches lets you open, rename and delete patches. **● Rec** records the audio output. When you stop, you can play the recording back, download it, or on iPad share it or save it to Files.
 

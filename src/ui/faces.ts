@@ -28,7 +28,7 @@ export function createFace(m: ModuleInstance): Face | null {
 
 /** Four bars, as tall as their weights, in a neutral grey; the one just picked lights up. */
 function probabilityFace(): Face {
-  const el = h('div', { class: 'prob-bars', 'aria-hidden': 'true' });
+  const el = h('div', { class: 'prob-bars face-visual', 'aria-hidden': 'true' });
   const bars = Array.from({ length: 4 }, (_, i) => el.appendChild(h('span', {}, h('i', {}), h('b', {}, String(i + 1)))));
   let last = -2;
   return {
@@ -49,7 +49,7 @@ function probabilityFace(): Face {
 
 /** Two lamps, A and B; the side the last event took flashes. */
 function chanceFace(): Face {
-  const el = h('div', { class: 'chance-lamps', 'aria-hidden': 'true' });
+  const el = h('div', { class: 'chance-lamps face-visual', 'aria-hidden': 'true' });
   const a = el.appendChild(h('span', {}, 'A'));
   const b = el.appendChild(h('span', {}, 'B'));
   let last = '';

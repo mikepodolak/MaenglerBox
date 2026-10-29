@@ -17,6 +17,7 @@ export const chanceGate: ModuleType = {
   def: {
     type: 'chance',
     label: 'Chance Gate',
+    visual: true,
     category: 'Generative',
     description: 'Each gate or note goes out A with some chance, otherwise out B. Coin toss for rhythms.',
     inputs: [{ id: 'in', label: 'In', kind: 'gate' }],
@@ -73,6 +74,7 @@ export const probability: ModuleType = {
   def: {
     type: 'random',
     label: 'Probability',
+    visual: true,
     category: 'Generative',
     description: 'Each trigger picks one of four outs by weight. Notes carries the pick as a preset number (1–4), so one FM Voice becomes a random kit.',
     inputs: [{ id: 'trig', label: 'Trig', kind: 'gate' }],
@@ -395,6 +397,7 @@ export const sampleHold: ModuleType = {
   def: {
     type: 'sh',
     label: 'Sample & Hold',
+    visual: true,
     category: 'Modulation',
     description: 'Each trigger holds a new random value, or takes a drunken step from the last one. Out as CV and as notes on a scale.',
     inputs: [{ id: 'trig', label: 'Trig', kind: 'gate' }],

@@ -145,7 +145,7 @@ export const HELP: Record<string, ModuleHelp> = {
     ],
   },
   markov: {
-    about: 'A first-order Markov chain, like the Max matrixctrl → prob patches. Each row of the dial grid is a state; the circles in that row are the odds of moving to each column’s state next (bigger = likelier). On every clock the chain moves and plays the new state: its note, velocity and length, with its own chance of sounding. Each state can also fire one of eight Trig outputs, so the chain can route its states to different synths, like the TRIG column in the Max patch.',
+    about: 'A first-order Markov chain, like the Max matrixctrl → prob patches. Each row of the dial grid is a state; the circles in that row are the odds of moving to each column’s state next (bigger = likelier). On every clock the chain moves and plays the new state: its note, velocity and length, with its own chance of sounding. Each state can also fire one of eight Trig outputs, so the chain can route its states to different synths, like the TRIG column in the Max patch. You can play the grid right on the card: tap a dial to step its weight or drag it up and down; in Play mode, long-press to show the jacks.',
     inputs: { clock: 'Takes one step through the chain.', reset: 'Back to state 1.' },
     outputs: {
       notes: 'Every state that sounds, with its note and velocity. It also carries the state number as a preset number, so states can pick FM presets.',
