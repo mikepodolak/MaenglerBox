@@ -24,7 +24,8 @@ import {
 import type { ModuleDef, ModuleInstance, ParamDef, Patch, Preset } from '../patch/types';
 import { paramControl, type ParamControl } from './controls';
 import { h } from './dom';
-import { Tracker } from './Tracker';
+import { TrackOverview, Tracker } from './Tracker';
+import { TRACKS, trackPort, type MultiTrackerData } from '../modules/multiTracker';
 
 /**
  * Panel for the selected module: every param, grouped, plus custom editors
@@ -88,8 +89,9 @@ export class Inspector {
       ...(rest.length ? [{ label: def.groups ? 'More' : '', params: rest }] : []),
     ];
 
-    this.steps = m.type === 'sequencer' ? new StepEditor(this.store, m.id) : null;
-    this.presets = new PresetPanel(this.store, m.id, m.type === 'sequencer' ? 'Patterns' : 'Presets', usesLibrary(def));
+    const stepped = m.type === 'sequencer' || m.type === 'tracker';
+    this.steps = stepped ? new StepEditor(this.store, m.id, m.type === 'tracker') : null;
+    this.presets = new PresetPanel(this.store, m.id, stepped ? 'Patterns' : 'Presets', usesLibrary(def));
     const mutateAmount = h('input', { type: 'range', min: 1, max: 50, step: 1, 'aria-label': 'Mutate amount' });
     mutateAmount.value = '15';
     const randomizeBar = h(
@@ -261,10 +263,17 @@ class StepEditor {
   private lockAdd = h('select', { class: 'plock-add', 'aria-label': 'Lock a setting' });
   private target: LockTarget | null = null;
   private lockControls = new Map<string, ParamControl>();
+  /** Multi-track Tracker only: the track being edited, its overview and track picker. */
+  private track = 0;
+  private overview: TrackOverview | null = null;
+  private trackBtns: HTMLButtonElement[] = [];
+  private trackPicker: HTMLElement | null = null;
+  private module: ModuleInstance | null = null;
 
   constructor(
     private readonly store: AppStore,
     private readonly moduleId: string,
+    private readonly multi = false,
   ) {
     this.onBtn.addEventListener('click', () => this.edit({ on: !this.step().on }));
     const nudge = (d: number) => h('button', { onclick: () => this.edit({ note: this.step().note + d }) }, d > 0 ? `+${d}` : String(d));
@@ -311,7 +320,7 @@ class StepEditor {
         const locks = new Set(this.data!.locks ?? []);
         if (locks.has(f)) locks.delete(f);
         else locks.add(f);
-        this.store.update((p) => setModuleData(p, getDef, this.moduleId, { ...this.data!, locks: [...locks] }));
+        this.write({ ...this.data!, locks: [...locks] });
       });
       this.fieldLockBtns.set(f, b);
       fieldLocks.append(b);
@@ -328,10 +337,39 @@ class StepEditor {
       this.viewBtns.set(v, b);
       views.append(b);
     }
+    let trackPicker: HTMLElement | null = null;
+    if (multi) {
+      this.overview = new TrackOverview(
+        TRACKS,
+        (t, i) => {
+          this.track = t;
+          this.selected = i;
+          if (this.module) this.update(this.module);
+        },
+        (t, i, change, key) => this.edit(change, key, i, t),
+        (t) => {
+          const d = this.module!.data as MultiTrackerData;
+          const mutes = d.mutes.map((m, j) => (j === t ? !m : m));
+          this.store.update((p) => setModuleData(p, getDef, this.moduleId, { ...d, mutes }));
+        },
+      );
+      trackPicker = h('div', { class: 'segmented small track-picker', role: 'group', 'aria-label': 'Track' });
+      this.trackPicker = trackPicker;
+      for (let t = 0; t < TRACKS; t++) {
+        const b = h('button', { 'aria-pressed': 'false', 'aria-label': `Track ${t + 1}` }, String(t + 1));
+        b.addEventListener('click', () => {
+          this.track = t;
+          if (this.module) this.update(this.module);
+        });
+        this.trackBtns.push(b);
+        trackPicker.append(b);
+      }
+    }
     this.el.append(
-      h('div', { class: 'steps-head' }, h('h3', { class: 'steps-title' }, 'Steps'), views),
+      h('div', { class: 'steps-head' }, h('h3', { class: 'steps-title' }, multi ? 'Tracks' : 'Steps'), views),
+      trackPicker ?? '',
       this.grid,
-      this.tracker.el,
+      this.overview?.el ?? this.tracker.el,
       this.detail,
       patternBar,
       fieldLocks,
@@ -339,9 +377,10 @@ class StepEditor {
   }
 
   update(m: ModuleInstance): void {
-    this.data = m.data as SequencerData;
+    this.module = m;
+    this.data = this.multi ? (m.data as MultiTrackerData).tracks[this.track] : (m.data as SequencerData);
     this.settings = m.params;
-    this.target = lockTarget(this.store.patch, m.id);
+    this.target = lockTarget(this.store.patch, m.id, this.multi ? trackPort(this.track) : 'out');
     this.len = Math.round(m.params.length);
     if (this.selected >= this.len) this.selected = 0;
     while (this.cells.length < this.len) {
@@ -368,6 +407,7 @@ class StepEditor {
     this.cells[step]?.classList.add('playing');
     this.lastPlaying = step;
     this.tracker.tick(step);
+    this.overview?.tick(step);
   }
 
   private step(): Step {
@@ -400,8 +440,17 @@ class StepEditor {
     const view = this.store.prefs.stepView;
     for (const [v, b] of this.viewBtns) b.setAttribute('aria-pressed', String(v === view));
     this.grid.hidden = view !== 'grid';
-    this.tracker.el.hidden = view !== 'tracker';
-    if (view === 'tracker') this.tracker.update(this.data, this.len, this.selected);
+    if (this.overview) {
+      this.overview.el.hidden = view !== 'tracker';
+      // The overview has its own track headers (tap to mute); the picker is for the grid.
+      this.trackPicker!.hidden = view === 'tracker';
+      if (view === 'tracker') this.overview.update(this.module!.data as MultiTrackerData, this.len, this.track, this.selected);
+      this.trackBtns.forEach((b, t) => b.setAttribute('aria-pressed', String(t === this.track)));
+      this.title.textContent = `Track ${this.track + 1} · Step ${this.selected + 1}`;
+    } else {
+      this.tracker.el.hidden = view !== 'tracker';
+      if (view === 'tracker') this.tracker.update(this.data, this.len, this.selected);
+    }
     this.paintLocks(s);
   }
 
@@ -430,7 +479,9 @@ class StepEditor {
       for (const [id, c] of this.lockControls) c.set(s.plocks[id]);
     }
     const options: (HTMLOptionElement | null)[] = [
-      h('option', { value: '' }, t ? (ids.length >= MAX_PLOCKS ? 'Lock limit reached' : '+ Lock a setting…') : 'Patch Notes to a synth to lock its settings'),
+      h('option', { value: '' }, t
+        ? (ids.length >= MAX_PLOCKS ? 'Lock limit reached' : '+ Lock a setting…')
+        : `Patch ${this.multi ? `Track ${this.track + 1}` : 'Notes'} to a synth to lock its settings`),
     ];
     if (t && ids.length < MAX_PLOCKS) {
       for (const [id, p] of t.params) if (!(id in s.plocks)) options.push(h('option', { value: id }, p.label));
@@ -458,16 +509,27 @@ class StepEditor {
       scale: this.settings.scale,
       root: this.settings.root,
     });
-    this.store.update((p) => setModuleData(p, getDef, this.moduleId, next));
+    this.write(next);
   }
 
-  private edit(change: Partial<Step>, coalesceKey?: string, i = this.selected): void {
-    const data = this.data!;
+  private edit(change: Partial<Step>, coalesceKey?: string, i = this.selected, track = this.track): void {
+    const data = this.trackData(track);
     const steps = data.steps.map((s, j) => (j === i ? { ...s, ...change } : s));
-    this.store.update(
-      (p) => setModuleData(p, getDef, this.moduleId, { ...data, steps }),
-      coalesceKey ? `step:${this.moduleId}:${i}:${coalesceKey}` : undefined,
-    );
+    this.write({ ...data, steps }, coalesceKey ? `step:${this.moduleId}:${track}:${i}:${coalesceKey}` : undefined, track);
+  }
+
+  private trackData(track: number): SequencerData {
+    return this.multi ? (this.module!.data as MultiTrackerData).tracks[track] : this.data!;
+  }
+
+  /** Store one track's pattern: the whole data for a sequencer, one slot of `tracks` for a Tracker. */
+  private write(next: SequencerData, coalesce?: string, track = this.track): void {
+    this.store.update((p) => {
+      if (!this.multi) return setModuleData(p, getDef, this.moduleId, next);
+      const m = p.modules.find((x) => x.id === this.moduleId)!;
+      const d = m.data as MultiTrackerData;
+      return setModuleData(p, getDef, this.moduleId, { ...d, tracks: d.tracks.map((t, j) => (j === track ? next : t)) });
+    }, coalesce);
   }
 }
 
@@ -477,10 +539,10 @@ interface LockTarget {
   params: Map<string, { def: ParamDef; label: string }>;
 }
 
-/** The first synth patched to a sequencer's Notes output, whose settings its steps can lock. */
-function lockTarget(patch: Patch, seqId: string): LockTarget | null {
+/** The first synth patched to a sequencer's (or a track's) Notes output, whose settings its steps can lock. */
+function lockTarget(patch: Patch, seqId: string, port: string): LockTarget | null {
   for (const c of patch.cables) {
-    if (c.from.module !== seqId || c.from.port !== 'out') continue;
+    if (c.from.module !== seqId || c.from.port !== port) continue;
     const module = patch.modules.find((m) => m.id === c.to.module);
     const def = module && getDef(module.type);
     if (module && def && def.params.length) return { module, params: lockableParams(def) };

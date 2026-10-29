@@ -48,6 +48,14 @@ Ports carry three kinds of signal: **audio**, **cv** (modulation) and **gate** (
 - **Conditions** decide which loops a step plays on: `1:2` plays on the first of every two loops, `3:4` on the third of four, **First loop**, **If prev played**, and **Fill** (follows the sequencer's Fill switch).
 - **Parameter locks** override a setting of the synth for one step only. Pick one from **+ Lock a setting…**; the list shows the settings of the synth the sequencer's Notes output is patched to.
 
+## The Tracker module
+
+**+ Module → Tracker** adds an M8-style tracker: eight tracks on one clock, each with its own **Track** output to patch to its own voice. Every track has the Chance Sequencer's per-step chance, ratchets, conditions, presets and parameter locks.
+
+- In **Tracker** view all eight tracks sit side by side. Tap a cell to edit that step below; the bar nudges its note. Tap a track number at the top to mute or unmute it. Small dots mark steps with a condition (yellow) or parameter locks (teal).
+- In **Grid** view, pick a track with the 1–8 buttons and edit it like a Chance Sequencer.
+- Parameter locks on a track offer the settings of the synth patched to that track's output.
+
 Audio and CV can be patched into each other; gates only connect to gates.
 
 ## Roadmap

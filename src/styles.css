@@ -1021,6 +1021,77 @@ input[type='range'] {
   text-overflow: ellipsis;
 }
 
+.overview .trk-row {
+  grid-template-columns: 1.8em repeat(var(--tracks, 8), minmax(0, 1fr));
+  max-width: none;
+}
+
+.overview .trk-cell {
+  position: relative;
+  font-size: 12px;
+  padding: 0;
+}
+
+.overview .trk-cell.off,
+.overview .trk-cell.muted {
+  color: var(--muted);
+}
+
+.overview .trk-cell.muted {
+  opacity: 0.45;
+}
+
+/* Small corner marks: a condition (top right), parameter locks (bottom right). */
+.overview .trk-cell.has-cond::before,
+.overview .trk-cell.has-locks::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.overview .trk-cell.has-cond::before {
+  top: 3px;
+  background: var(--gate);
+}
+
+.overview .trk-cell.has-locks::after {
+  bottom: 3px;
+  background: var(--cv);
+}
+
+.trk-track {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-weight: 600;
+}
+
+.trk-track.current {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.trk-track.muted {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.track-picker[hidden] {
+  display: none;
+}
+
+.track-picker {
+  display: flex;
+  margin-bottom: 8px;
+}
+
+.track-picker button {
+  flex: 1;
+}
+
 .plocks h4 {
   margin: 6px 0 4px;
   font-size: 12px;
