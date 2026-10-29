@@ -84,6 +84,7 @@ export const life: ModuleType = {
   def: {
     type: 'life',
     label: 'Game of Life',
+    visual: true,
     category: 'Generative',
     description: 'Cells live and die by Conway\'s rules. A scan line plays the live cells as notes; births fire gates; population is CV.',
     inputs: [

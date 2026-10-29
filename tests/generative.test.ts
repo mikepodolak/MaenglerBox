@@ -210,7 +210,7 @@ describe('Markov Chain', () => {
     const d = markovData.normalize({ weights: [[200, -1]], states: [{ note: 500, repeat: 0 }] });
     expect(d.weights[0].slice(0, 2)).toEqual([100, 0]);
     expect(d.weights).toHaveLength(16);
-    expect(d.states[0]).toEqual({ note: 127, repeat: 1, mute: false });
+    expect(d.states[0]).toMatchObject({ note: 127, repeat: 1, mute: false, prob: 1, trig: 1 });
   });
 
   it('plays a walk, holding states by their repeat count, and tags notes with the state', () => {
@@ -319,5 +319,24 @@ describe('Bouncing Balls', () => {
       expect(b.y).toBeGreaterThanOrEqual(0);
       expect(b.y).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('Markov routing', () => {
+  it('fires each state on its Trig output, honours per-state chance, and scales old 1–4 weights', () => {
+    const data = markovData.create();
+    data.weights = data.weights.map((row, r) => row.map((_, c) => (c === (r + 1) % 4 ? 100 : 0)));
+    data.states[2] = { ...data.states[2], prob: 0 };
+    const rt = markov.create(fakeEnv(), { size: 4, gate: 1, chance: 1, transpose: 0 }, data);
+    const t1 = listen(rt, 'trig1');
+    const t2 = listen(rt, 'trig2');
+    const notes = listen(rt, 'notes');
+    clock(rt, 4);
+    // States 1, 2, 3 (chance 0, silent), 4. Odd states → Trig 1, even → Trig 2.
+    expect(notes.map((e) => e.index)).toEqual([1, 2, 4]);
+    expect(t1.map((e) => e.index)).toEqual([1]);
+    expect(t2.map((e) => e.index)).toEqual([2, 4]);
+    expect(notes[0].value).toBeCloseTo(0.85);
+    expect(markovData.normalize({ weights: [[0, 4, 2]] }).weights[0].slice(0, 3)).toEqual([0, 100, 50]);
   });
 });

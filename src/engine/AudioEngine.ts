@@ -21,6 +21,9 @@ export class AudioEngine {
   private ready = false;
   private worklets: Promise<void> = Promise.resolve();
   private analyser: AnalyserNode | null = null;
+  private master: AudioNode | null = null;
+  private recorder: MediaRecorder | null = null;
+  private recordStart = 0;
   private listeners = new Set<(s: EngineState) => void>();
   state: EngineState = 'off';
 
@@ -51,6 +54,7 @@ export class AudioEngine {
       this.analyser = ctx.createAnalyser();
       this.analyser.fftSize = 2048;
       limiter.connect(this.analyser);
+      this.master = limiter;
       this.scheduler = new Scheduler({ now: () => ctx.currentTime });
       this.runtime = new PatchRuntime({ ctx, scheduler: this.scheduler, master: limiter }, getModuleType);
       unlockWithSilentBuffer(ctx);
@@ -86,6 +90,53 @@ export class AudioEngine {
     if (!this.ready) return;
     this.runtime?.setLibrary(library);
     this.runtime?.sync(patch);
+  }
+
+  get recording(): boolean {
+    return this.recorder?.state === 'recording';
+  }
+
+  /** Seconds since recording started, or 0. */
+  recordedSeconds(): number {
+    return this.recording && this.ctx ? this.ctx.currentTime - this.recordStart : 0;
+  }
+
+  /** Start recording what comes out of the speakers. Needs audio running. */
+  startRecording(): boolean {
+    if (!this.ctx || !this.master || this.recording || typeof MediaRecorder === 'undefined') return false;
+    const dest = this.ctx.createMediaStreamDestination();
+    this.master.connect(dest);
+    // Safari records AAC in MP4; Chrome and Firefox record Opus in WebM.
+    const mimeType = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported(t));
+    const rec = new MediaRecorder(dest.stream, mimeType ? { mimeType, audioBitsPerSecond: 256000 } : undefined);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      this.master?.disconnect(dest);
+      this.lastRecording = new Blob(chunks, { type: rec.mimeType || mimeType || 'audio/webm' });
+      this.recordingDone?.(this.lastRecording);
+    };
+    rec.start(1000);
+    this.recorder = rec;
+    this.recordStart = this.ctx.currentTime;
+    return true;
+  }
+
+  lastRecording: Blob | null = null;
+  private recordingDone: ((b: Blob) => void) | null = null;
+
+  /** Stop recording and get the audio file. */
+  stopRecording(): Promise<Blob | null> {
+    const rec = this.recorder;
+    if (!rec || rec.state === 'inactive') return Promise.resolve(null);
+    return new Promise((resolve) => {
+      this.recordingDone = (b) => {
+        this.recordingDone = null;
+        this.recorder = null;
+        resolve(b);
+      };
+      rec.stop();
+    });
   }
 
   /** Current RMS level of the master output, 0..1. */

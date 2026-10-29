@@ -45,6 +45,11 @@ export interface ModuleDef {
   label: string;
   /** One-line description shown in the module picker. */
   description?: string;
+  /**
+   * A module whose drawing is the point (balls, Life, Euclid rings): its card
+   * can be resized, and in Play mode it shows only the drawing until tapped.
+   */
+  visual?: boolean;
   /** Heading the module is listed under in the module picker. */
   category?: ModuleCategory;
   inputs: PortDef[];
@@ -82,6 +87,8 @@ export interface ModuleInstance {
   presets?: (Preset | null)[];
   /** Param ids that randomize and mutate leave alone. */
   locks?: string[];
+  /** Card width on the canvas, for resizable (visual) modules. */
+  width?: number;
 }
 
 export interface Preset {

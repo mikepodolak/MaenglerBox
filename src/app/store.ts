@@ -175,6 +175,28 @@ export class AppStore {
     void this.save();
   }
 
+  /** Rename any saved patch. The open one is renamed in place (undoably), others in storage. */
+  async renamePatch(id: string, name: string): Promise<void> {
+    const clean = name.trim() || 'Untitled';
+    if (id === this.patch.id) {
+      this.update((p) => ({ ...p, name: clean, updatedAt: Date.now() }));
+      return;
+    }
+    const raw = await this.storage.load(id);
+    if (!raw) return;
+    const p = deserializePatch(raw, getDef);
+    await this.storage.save({ ...p, name: clean }, false);
+  }
+
+  /** Delete a saved patch. Deleting the open one moves to the most recent other patch, or a fresh one. */
+  async deletePatch(id: string): Promise<void> {
+    await this.storage.remove(id);
+    if (id !== this.patch.id) return;
+    const next = (await this.storage.list())[0];
+    if (next) await this.open(next.id);
+    else this.newPatch();
+  }
+
   /** Switch to a different patch, clearing undo history and selection. */
   private replace(patch: Patch): void {
     this.patch = patch;

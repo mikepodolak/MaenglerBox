@@ -170,6 +170,7 @@ export const balls: ModuleType = {
   def: {
     type: 'balls',
     label: 'Bouncing Balls',
+    visual: true,
     category: 'Generative',
     description: 'Balls fall and bounce. Floor hits play notes from where they land; wall and ball collisions fire gates; ball 1 sends its X/Y as CV.',
     inputs: [

@@ -70,7 +70,13 @@ The module menu is grouped into Sequencing, Generative, Sound, Modulation and Ut
 - **Markov Chain**: a grid of transition weights of up to 16×16. Each row is a state (a note), and its cells set where the chain can go next. Tap a cell to cycle its weight. Each state can repeat or rest.
 - **Bouncing Balls**: balls under gravity. Floor hits play notes picked by where the ball lands. Wall and ball-to-ball hits fire their own gates, and ball 1's position comes out as X/Y CV. A gate into Kick throws the balls back up.
 - **Game of Life**: Conway's rules on a 16×12 grid you draw. A scan line plays the live cells it crosses, with higher rows playing higher notes. Births and deaths fire gates, and the population is sent out as CV. A stuck grid reseeds itself.
-- **Euclidean**: spreads hits evenly over a loop. **Turing Machine**: a looping random melody that mutates by a chosen amount. **Sample & Hold**: random or drunk-walk values, sent out as CV and as notes.
+- **Euclidean**: four concentric rings, each spreading its hits evenly over its own loop at its own speed. Each ring has its own output, and Notes plays all four rings with their own pitches.
+- **Turing Machine**: a looping random melody that mutates by a chosen amount. It is drawn as a lit pad grid, one column per step.
+- **Sample & Hold**: random or drunk-walk values, sent out as CV and as notes.
+
+Every module has a **?** button that opens its help. The help covers what each jack carries, what the main settings do, and example patches you can add in one tap. Visual modules (Balls, Life, Euclidean, Turing) can be resized from their corner in Edit mode. In Play mode they show only their drawing; tap the drawing to show the jacks and controls.
+
+**Patches and recording.** Patches lets you open, rename and delete patches. **● Rec** records the audio output. When you stop, you can play the recording back, download it, or on iPad share it or save it to Files.
 
 **Any output into any input.** As in VCV Rack, a gate patched into a CV input becomes a level that is high while the note plays. A CV or audio signal patched into a gate input fires a gate each time it rises past 0.5, for example a bouncing ball's height clocking a Markov chain.
 
