@@ -9,6 +9,8 @@ export interface GateEvent {
   note?: number;
   /** Optional plain number riding with the event, e.g. which preset a synth should use (1-based). */
   index?: number;
+  /** Optional parameter locks: the receiving module plays this event with these settings overridden. */
+  params?: Record<string, number>;
 }
 
 export type GateHandler = (event: GateEvent) => void;

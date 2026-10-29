@@ -71,9 +71,11 @@ export const fmVoice: ModuleType = {
         gate: {
           kind: 'gate',
           // A note carrying a preset number plays with that preset's sound, so one voice can be a whole kit.
+          // Parameter locks on the note then override single settings on top.
           handler: (e) => {
             const preset = e.index ? presets[e.index - 1] : null;
-            const src = preset ? { ...p, ...preset.params } : p;
+            const own = preset || e.params;
+            const src = own ? { ...p, ...preset?.params, ...e.params } : p;
             send({
               type: 'note',
               event: {
@@ -81,7 +83,7 @@ export const fmVoice: ModuleType = {
                 note: (e.note ?? 60) + src.transpose,
                 velocity: e.value,
                 length: e.length,
-                params: preset ? toFMParams(src) : undefined,
+                params: own ? toFMParams(src) : undefined,
               },
             });
           },

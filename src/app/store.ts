@@ -15,10 +15,12 @@ export type SaveState = 'saved' | 'saving' | 'error';
 export interface Prefs {
   mode: 'edit' | 'play';
   cableStyle: 'curved' | 'square';
+  /** How the sequencer's steps are shown: the 16-pad grid or the M8-style tracker. */
+  stepView: 'grid' | 'tracker';
 }
 
 const PREFS_KEY = 'maenglerbox:prefs';
-const DEFAULT_PREFS: Prefs = { mode: 'edit', cableStyle: 'curved' };
+const DEFAULT_PREFS: Prefs = { mode: 'edit', cableStyle: 'curved', stepView: 'grid' };
 
 function loadPrefs(): Prefs {
   try {
@@ -26,6 +28,7 @@ function loadPrefs(): Prefs {
     return {
       mode: raw.mode === 'play' ? 'play' : 'edit',
       cableStyle: raw.cableStyle === 'square' ? 'square' : 'curved',
+      stepView: raw.stepView === 'tracker' ? 'tracker' : 'grid',
     };
   } catch {
     return { ...DEFAULT_PREFS };

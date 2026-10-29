@@ -1,6 +1,15 @@
 import type { AppStore } from '../app/store';
 import { getDef } from '../modules/registry';
-import { noteName, randomizeSteps, STEP_FIELDS, type SequencerData, type Step, type StepField } from '../modules/sequencer';
+import {
+  CONDITIONS,
+  MAX_PLOCKS,
+  noteName,
+  randomizeSteps,
+  STEP_FIELDS,
+  type SequencerData,
+  type Step,
+  type StepField,
+} from '../modules/sequencer';
 import { removeModule, setModuleData, setParam } from '../patch/model';
 import {
   applyPreset,
@@ -12,9 +21,10 @@ import {
   setLocked,
   usesLibrary,
 } from '../patch/presets';
-import type { ModuleInstance, ParamDef, Preset } from '../patch/types';
+import type { ModuleDef, ModuleInstance, ParamDef, Patch, Preset } from '../patch/types';
 import { paramControl, type ParamControl } from './controls';
 import { h } from './dom';
+import { Tracker } from './Tracker';
 
 /**
  * Panel for the selected module: every param, grouped, plus custom editors
@@ -244,6 +254,13 @@ class StepEditor {
   private sendLabel = h('output', { class: 'note-name' });
   private fieldLockBtns = new Map<StepField, HTMLButtonElement>();
   private settings: Record<string, number> = {};
+  private tracker: Tracker;
+  private viewBtns = new Map<'grid' | 'tracker', HTMLButtonElement>();
+  private condSelect = h('select', { 'aria-label': 'Condition' });
+  private lockList = h('div', { class: 'plock-list' });
+  private lockAdd = h('select', { class: 'plock-add', 'aria-label': 'Lock a setting' });
+  private target: LockTarget | null = null;
+  private lockControls = new Map<string, ParamControl>();
 
   constructor(
     private readonly store: AppStore,
@@ -259,6 +276,21 @@ class StepEditor {
     }
     const send = (d: number) =>
       h('button', { onclick: () => this.edit({ send: Math.min(16, Math.max(0, this.step().send + d)) }) }, d > 0 ? '+' : '−');
+    for (const c of CONDITIONS) this.condSelect.append(h('option', { value: c.id }, c.label));
+    this.condSelect.addEventListener('change', () => this.edit({ cond: this.condSelect.value }));
+    this.lockAdd.addEventListener('change', () => {
+      const id = this.lockAdd.value;
+      this.lockAdd.value = '';
+      if (!id || !this.target) return;
+      this.edit({ plocks: { ...this.step().plocks, [id]: this.target.module.params[id] } });
+    });
+    this.tracker = new Tracker(
+      (i) => {
+        this.selected = i;
+        this.paint();
+      },
+      (i, change, key) => this.edit(change, key, i),
+    );
     this.detail.append(
       h('div', { class: 'step-detail-head' }, this.title,
         h('button', { onclick: () => this.randomize(1, [this.selected]), title: 'Randomize this step' }, 'Randomize step'),
@@ -268,6 +300,9 @@ class StepEditor {
       ...[...this.stepControls.values()].map((c) => c.el),
       h('div', { class: 'send-row', title: 'A synth plays this step with the preset of this number' },
         h('span', { class: 'param-label' }, 'Preset'), send(-1), this.sendLabel, send(1)),
+      h('label', { class: 'param choice', title: 'When this step is allowed to play' },
+        h('span', { class: 'param-label' }, 'Condition'), this.condSelect),
+      h('div', { class: 'plocks' }, h('h4', {}, 'Parameter locks'), this.lockList, this.lockAdd),
     );
     const fieldLocks = h('div', { class: 'field-locks' }, h('span', { class: 'param-label' }, 'Keep'));
     for (const f of STEP_FIELDS) {
@@ -287,12 +322,26 @@ class StepEditor {
       h('button', { onclick: () => this.randomize(1) }, 'Randomize pattern'),
       h('button', { onclick: () => this.randomize(0.15) }, 'Mutate pattern'),
     );
-    this.el.append(h('h3', { class: 'steps-title' }, 'Steps'), this.grid, this.detail, patternBar, fieldLocks);
+    const views = h('div', { class: 'segmented small', role: 'group', 'aria-label': 'Step view' });
+    for (const [v, label] of [['grid', 'Grid'], ['tracker', 'Tracker']] as const) {
+      const b = h('button', { 'aria-pressed': 'false', onclick: () => this.store.setPref('stepView', v) }, label);
+      this.viewBtns.set(v, b);
+      views.append(b);
+    }
+    this.el.append(
+      h('div', { class: 'steps-head' }, h('h3', { class: 'steps-title' }, 'Steps'), views),
+      this.grid,
+      this.tracker.el,
+      this.detail,
+      patternBar,
+      fieldLocks,
+    );
   }
 
   update(m: ModuleInstance): void {
     this.data = m.data as SequencerData;
     this.settings = m.params;
+    this.target = lockTarget(this.store.patch, m.id);
     this.len = Math.round(m.params.length);
     if (this.selected >= this.len) this.selected = 0;
     while (this.cells.length < this.len) {
@@ -318,6 +367,7 @@ class StepEditor {
     this.cells[this.lastPlaying]?.classList.remove('playing');
     this.cells[step]?.classList.add('playing');
     this.lastPlaying = step;
+    this.tracker.tick(step);
   }
 
   private step(): Step {
@@ -345,6 +395,59 @@ class StepEditor {
     this.sendLabel.textContent = s.send ? `P${s.send}` : '—';
     const locks = new Set(this.data.locks ?? []);
     for (const [f, b] of this.fieldLockBtns) b.setAttribute('aria-pressed', String(locks.has(f)));
+    if (document.activeElement !== this.condSelect) this.condSelect.value = s.cond;
+
+    const view = this.store.prefs.stepView;
+    for (const [v, b] of this.viewBtns) b.setAttribute('aria-pressed', String(v === view));
+    this.grid.hidden = view !== 'grid';
+    this.tracker.el.hidden = view !== 'tracker';
+    if (view === 'tracker') this.tracker.update(this.data, this.len, this.selected);
+    this.paintLocks(s);
+  }
+
+  /** One slider per locked setting, plus a picker for the settings of the synth this sequencer plays. */
+  private paintLocks(s: Step): void {
+    const t = this.target;
+    const ids = Object.keys(s.plocks);
+    const key = `${t?.module.id}|${this.selected}|${ids.join(',')}`;
+    if (this.lockList.dataset.key !== key) {
+      this.lockList.dataset.key = key;
+      this.lockControls.clear();
+      this.lockList.replaceChildren(
+        ...ids.map((id) => {
+          const p = t?.params.get(id);
+          if (!p) {
+            return h('div', { class: 'plock missing' }, h('span', {}, `${id} (not on the patched synth)`), this.removeLockBtn(id));
+          }
+          const c = paramControl(p.def, s.plocks[id], (v) => this.edit({ plocks: { ...this.step().plocks, [id]: v } }, `lock:${id}`));
+          c.el.querySelector('.param-label')!.textContent = p.label;
+          this.lockControls.set(id, c);
+          return h('div', { class: 'plock' }, c.el, this.removeLockBtn(id));
+        }),
+      );
+    } else {
+      // Same rows: just move the sliders.
+      for (const [id, c] of this.lockControls) c.set(s.plocks[id]);
+    }
+    const options: (HTMLOptionElement | null)[] = [
+      h('option', { value: '' }, t ? (ids.length >= MAX_PLOCKS ? 'Lock limit reached' : '+ Lock a setting…') : 'Patch Notes to a synth to lock its settings'),
+    ];
+    if (t && ids.length < MAX_PLOCKS) {
+      for (const [id, p] of t.params) if (!(id in s.plocks)) options.push(h('option', { value: id }, p.label));
+    }
+    this.lockAdd.replaceChildren(...options.filter((o): o is HTMLOptionElement => o !== null));
+    this.lockAdd.disabled = !t || ids.length >= MAX_PLOCKS;
+  }
+
+  private removeLockBtn(id: string): HTMLButtonElement {
+    return h('button', {
+      class: 'icon',
+      'aria-label': `Remove lock on ${id}`,
+      onclick: () => {
+        const { [id]: _, ...rest } = this.step().plocks;
+        this.edit({ plocks: rest });
+      },
+    }, '×');
   }
 
   private randomize(amount: number, steps?: number[]): void {
@@ -358,13 +461,41 @@ class StepEditor {
     this.store.update((p) => setModuleData(p, getDef, this.moduleId, next));
   }
 
-  private edit(change: Partial<Step>, coalesceKey?: string): void {
+  private edit(change: Partial<Step>, coalesceKey?: string, i = this.selected): void {
     const data = this.data!;
-    const i = this.selected;
     const steps = data.steps.map((s, j) => (j === i ? { ...s, ...change } : s));
     this.store.update(
       (p) => setModuleData(p, getDef, this.moduleId, { ...data, steps }),
       coalesceKey ? `step:${this.moduleId}:${i}:${coalesceKey}` : undefined,
     );
   }
+}
+
+interface LockTarget {
+  module: ModuleInstance;
+  /** Lockable settings, labelled with their group so 'Ratio' reads 'Op2 Ratio'. */
+  params: Map<string, { def: ParamDef; label: string }>;
+}
+
+/** The first synth patched to a sequencer's Notes output, whose settings its steps can lock. */
+function lockTarget(patch: Patch, seqId: string): LockTarget | null {
+  for (const c of patch.cables) {
+    if (c.from.module !== seqId || c.from.port !== 'out') continue;
+    const module = patch.modules.find((m) => m.id === c.to.module);
+    const def = module && getDef(module.type);
+    if (module && def && def.params.length) return { module, params: lockableParams(def) };
+  }
+  return null;
+}
+
+function lockableParams(def: ModuleDef): Map<string, { def: ParamDef; label: string }> {
+  const groupOf = new Map<string, string>();
+  for (const g of def.groups ?? []) for (const id of g.params) groupOf.set(id, g.label);
+  const short = (g: string) => g.replace(/^Operator (\d+).*$/, 'Op$1');
+  return new Map(
+    def.params.map((p) => {
+      const g = groupOf.get(p.id);
+      return [p.id, { def: p, label: g && /^Operator/.test(g) ? `${short(g)} ${p.label}` : p.label }];
+    }),
+  );
 }

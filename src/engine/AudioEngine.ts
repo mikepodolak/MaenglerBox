@@ -16,6 +16,8 @@ export class AudioEngine {
   private scheduler: Scheduler | null = null;
   private pending: Patch | null = null;
   private library: PresetLibrary = {};
+  /** True once the worklets have loaded; until then edits wait in `pending`. */
+  private ready = false;
   private worklets: Promise<void> = Promise.resolve();
   private analyser: AnalyserNode | null = null;
   private listeners = new Set<(s: EngineState) => void>();
@@ -65,6 +67,7 @@ export class AudioEngine {
       return;
     }
     this.scheduler!.start();
+    this.ready = true;
     this.runtime!.setLibrary(this.library);
     if (this.pending) this.runtime!.sync(this.pending);
     this.setState(this.ctx.state === 'running' ? 'running' : 'suspended');
@@ -79,6 +82,7 @@ export class AudioEngine {
   sync(patch: Patch, library: PresetLibrary = {}): void {
     this.pending = patch;
     this.library = library;
+    if (!this.ready) return;
     this.runtime?.setLibrary(library);
     this.runtime?.sync(patch);
   }
