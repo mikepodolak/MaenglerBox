@@ -74,11 +74,19 @@ The module menu is grouped into Sequencing, Generative, Sound, Modulation and Ut
 - **Turing Machine**: a looping random melody that mutates by a chosen amount. It is drawn as a lit pad grid, one column per step.
 - **Sample & Hold**: random or drunk-walk values, sent out as CV and as notes.
 
-Every module has a **?** button that opens its help. The help covers what each jack carries, what the main settings do, and example patches you can add in one tap. Visual modules (Balls, Life, Euclidean, Turing) can be resized from their corner in Edit mode. In Play mode they show only their drawing; tap the drawing to show the jacks and controls.
+Every module has a **?** button that opens its help. The help covers what each jack carries, what the main settings do, and example patches you can add in one tap. Visual modules (Balls, Life, Euclidean, Turing, Markov, Probability, Chance Gate, Sample & Hold) can be resized from their corner in Edit mode. In Play mode they show only their drawing; tap the drawing to show the jacks and controls. The Markov grid stays playable on the card in both modes: tap a dial to step its weight, drag up or down to set it, and long-press it in Play mode to show the jacks.
 
 **Patches and recording.** Patches lets you open, rename and delete patches. **● Rec** records the audio output. When you stop, you can play the recording back, download it, or on iPad share it or save it to Files.
 
 **Any output into any input.** As in VCV Rack, a gate patched into a CV input becomes a level that is high while the note plays. A CV or audio signal patched into a gate input fires a gate each time it rises past 0.5, for example a bouncing ball's height clocking a Markov chain.
+
+## Modulating any setting
+
+Every setting of every module can take a cable. In Edit mode, drag an output (an LFO's Out, a Sample & Hold, even a sequencer's notes) and drop it on any slider, on a card or in the settings panel. The setting gets a `~` jack on its card and the cable plugs into it. The slider's thumb stays where you set it, and a teal dot shows where the cable is moving it right now.
+
+In the settings panel, **Modulation** lists each patched setting with an Amount per cable (negative turns it the other way), lets you unplug or remove a jack, and can add a jack for any setting from a list. The signal is added along the slider's travel, so exponential settings sweep evenly; choice settings step through their options.
+
+The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or synced to a clock (one cycle every so many ticks), a Reset input, and −1..1 or 0..1 range.
 
 ## Roadmap
 

@@ -1,8 +1,24 @@
 import type { AppStore } from '../app/store';
 import { getDef } from '../modules/registry';
-import { canConnect, connect, disconnect, MAX_CARD_WIDTH, MIN_CARD_WIDTH, moveModule, PatchError, resizeModule, setParam } from '../patch/model';
+import { MARKOV_LEVELS, type MarkovData } from '../modules/markov';
+import {
+  canConnect,
+  connect,
+  disconnect,
+  MAX_CARD_WIDTH,
+  MIN_CARD_WIDTH,
+  modParam,
+  modPort,
+  modPortDef,
+  moveModule,
+  PatchError,
+  resizeModule,
+  setModuleData,
+  setParam,
+} from '../patch/model';
 import { openHelp } from './help';
 import type { Cable, ModuleDef, ModuleInstance, Patch, PortKind, PortRef } from '../patch/types';
+import { fullParamLabel } from '../patch/params';
 import { paramControl, type ParamControl } from './controls';
 import { h } from './dom';
 import { createFace, type Face } from './faces';
@@ -12,6 +28,7 @@ const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2.5;
 /** Movement (px) below which a press counts as a tap rather than a drag. */
 const TAP_SLOP = 6;
+const LONG_PRESS_MS = 450;
 /** World grid that modules snap to when dropped. Matches the background dots. */
 export const GRID = 24;
 
@@ -30,6 +47,9 @@ interface Card {
   instance: ModuleInstance;
   controls: Map<string, ParamControl>;
   face: Face | null;
+  /** Jacks for settings that take a cable, rebuilt when the list changes. */
+  modIns: HTMLElement;
+  modKey: string;
 }
 
 interface JackInfo {
@@ -46,7 +66,8 @@ type Gesture =
   | { kind: 'cable'; from: JackInfo; path: SVGPathElement }
   | { kind: 'resize'; id: string; startX: number; origW: number; moved: boolean }
   /** Play mode: a tap on a visual module's drawing shows or hides its jacks and controls. */
-  | { kind: 'reveal'; id: string; startX: number; startY: number; moved: boolean };
+  | { kind: 'reveal'; id: string; startX: number; startY: number; moved: boolean }
+  | { kind: 'cell'; id: string; r: number; c: number; w0: number; startX: number; startY: number; moved: boolean; done: boolean; timer: number };
 
 /**
  * The patching canvas. Modules are DOM cards on a pannable, zoomable world;
@@ -105,9 +126,14 @@ export class Canvas {
     this.drawCables();
   }
 
-  /** Per-frame hook for live displays (playheads). */
-  tick(state: (moduleId: string) => unknown): void {
-    for (const [id, card] of this.cards) card.face?.tick?.(state(id));
+  /** Per-frame hook for live displays (playheads) and sliders that cables are moving. */
+  tick(state: (moduleId: string) => unknown, mods?: (moduleId: string) => ReadonlyMap<string, number> | undefined): void {
+    for (const [id, card] of this.cards) {
+      card.face?.tick?.(state(id));
+      if (!card.controls.size) continue;
+      const live = mods?.(id);
+      for (const [pid, c] of card.controls) c.setMod(live?.get(pid) ?? null);
+    }
   }
 
   /** A spot near the middle of the visible area that doesn't overlap an existing module. */
@@ -115,7 +141,7 @@ export class Canvas {
   static cardHeight(def: ModuleDef): number {
     const ports = Math.max(def.inputs.length, def.outputs.length) * 28;
     const face = (def.face ?? []).length * 30;
-    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' || def.type === 'markov' ? 190 : def.type === 'random' ? 60 : ['sequencer', 'chance', 'sh'].includes(def.type) ? 40 : 0;
+    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' || def.type === 'markov' ? 190 : def.type === 'random' ? 60 : def.type === 'lfo' ? 80 : ['sequencer', 'chance', 'sh'].includes(def.type) ? 40 : 0;
     return 60 + ports + face + drawing;
   }
 
@@ -183,11 +209,11 @@ export class Canvas {
     const controls = new Map<string, ParamControl>();
     const faceParams = (def.face ?? []).map((id) => def.params.find((p) => p.id === id)!).filter(Boolean);
     for (const p of faceParams) {
-      controls.set(
-        p.id,
-        paramControl(p, m.params[p.id], (v) => this.store.update((x) => setParam(x, getDef, m.id, p.id, v), `param:${m.id}:${p.id}`), true),
-      );
+      const c = paramControl(p, m.params[p.id], (v) => this.store.update((x) => setParam(x, getDef, m.id, p.id, v), `param:${m.id}:${p.id}`), true);
+      c.el.dataset.modTarget = modTargetAttr(m.id, p.id);
+      controls.set(p.id, c);
     }
+    const modIns = h('div', { class: 'mod-ins' });
     const face = createFace(m);
     const el = h(
       'article',
@@ -202,7 +228,7 @@ export class Canvas {
       h(
         'div',
         { class: 'node-ports' },
-        h('div', { class: 'ins' }, ...def.inputs.map((p) => h('div', { class: 'port-row' }, jack('in', p), h('span', {}, p.label)))),
+        h('div', { class: 'ins' }, ...def.inputs.map((p) => h('div', { class: 'port-row' }, jack('in', p), h('span', {}, p.label))), modIns),
         h('div', { class: 'outs' }, ...def.outputs.map((p) => h('div', { class: 'port-row' }, h('span', {}, p.label), jack('out', p)))),
       ),
       face?.el ?? null,
@@ -210,7 +236,7 @@ export class Canvas {
       def.visual ? h('span', { class: 'node-resize', 'aria-label': 'Resize', title: 'Drag to resize' }) : null,
     );
     if (def.visual) el.classList.add('visual');
-    return { el, instance: m, controls, face };
+    return { el, instance: m, controls, face, modIns, modKey: '' };
   }
 
   private updateCard(card: Card, m: ModuleInstance): void {
@@ -229,6 +255,30 @@ export class Canvas {
     }
     for (const [id, c] of card.controls) c.set(m.params[id]);
     card.face?.update(m);
+    const modKey = (m.modJacks ?? []).join(',');
+    if (modKey !== card.modKey) {
+      card.modKey = modKey;
+      const def = getDef(m.type)!;
+      card.modIns.replaceChildren(
+        ...(m.modJacks ?? []).flatMap((pid) => {
+          const p = def.params.find((x) => x.id === pid);
+          if (!p) return [];
+          const port = modPortDef(p);
+          return [
+            h(
+              'div',
+              { class: 'port-row mod' },
+              h('span', {
+                class: 'jack cv',
+                'data-jack': JSON.stringify({ module: m.id, port: port.id, side: 'in', kind: 'cv' } satisfies JackInfo),
+                title: `${fullParamLabel(def, pid)} (setting)`,
+              }),
+              h('span', {}, fullParamLabel(def, pid)),
+            ),
+          ];
+        }),
+      );
+    }
   }
 
   // --- cables --------------------------------------------------------------
@@ -269,7 +319,8 @@ export class Canvas {
       const kind = jackInfo(a)?.kind ?? 'audio';
       const selected = c.id === this.selectedCable;
       const hit = svgEl('path', { d, class: 'cable-hit', 'data-cable': c.id });
-      const line = svgEl('path', { d, class: `cable ${kind}${selected ? ' selected' : ''}` });
+      const mod = modParam(c.to.port) !== null ? ' mod' : '';
+      const line = svgEl('path', { d, class: `cable ${kind}${mod}${selected ? ' selected' : ''}` });
       frag.append(line, hit);
       if (selected) frag.append(this.deleteHandle(c, mid));
     }
@@ -311,6 +362,10 @@ export class Canvas {
       this.store.select(open.closest<HTMLElement>('.node')!.dataset.module!);
       return;
     }
+
+    // The Markov grid on the card is playable in both modes: tap or drag a dial like in its settings.
+    const markovFace = target.closest<HTMLElement>('.markov-face');
+    if (markovFace && this.startCellGesture(e, markovFace, play)) return;
 
     // Play mode: layout and cables are locked, and a tap on a module opens its settings.
     // Dragging a module pans instead, so a swipe never opens a panel by accident.
@@ -373,6 +428,43 @@ export class Canvas {
     this.startBackgroundGesture(e);
   }
 
+  /** Start editing the Markov dial under the finger; a long press in Play mode shows the jacks instead. */
+  private startCellGesture(e: PointerEvent, face: HTMLElement, play: boolean): boolean {
+    const id = face.closest<HTMLElement>('.node')?.dataset.module;
+    const m = this.store.patch.modules.find((x) => x.id === id);
+    const data = m?.data as MarkovData | undefined;
+    if (!m || !data) return false;
+    const size = Math.round(m.params.size);
+    const rect = face.getBoundingClientRect();
+    const c = Math.floor(((e.clientX - rect.left) / rect.width) * size);
+    const r = Math.floor(((e.clientY - rect.top) / rect.height) * size);
+    if (r < 0 || c < 0 || r >= size || c >= size) return false;
+    e.preventDefault();
+    this.el.setPointerCapture(e.pointerId);
+    const g = { kind: 'cell' as const, id: m.id, r, c, w0: data.weights[r][c], startX: e.clientX, startY: e.clientY, moved: false, done: false, timer: 0 };
+    if (play) {
+      g.timer = window.setTimeout(() => {
+        if (g.moved || this.gesture !== g) return;
+        g.done = true;
+        if (this.revealed.has(g.id)) this.revealed.delete(g.id);
+        else this.revealed.add(g.id);
+        this.render();
+      }, LONG_PRESS_MS);
+    }
+    this.gesture = g;
+    return true;
+  }
+
+  private setCell(id: string, r: number, c: number, w: number): void {
+    this.store.update((p) => {
+      const m = p.modules.find((x) => x.id === id);
+      const data = m?.data as MarkovData | undefined;
+      if (!data) return p;
+      const weights = data.weights.map((row, i) => (i === r ? row.map((v, j) => (j === c ? w : v)) : row));
+      return setModuleData(p, getDef, id, { ...data, weights });
+    }, `markov:${id}:${r}:${c}`);
+  }
+
   /** Background: one finger pans, two pinch. */
   private startBackgroundGesture(e: PointerEvent, tapModule?: string): void {
     this.el.setPointerCapture(e.pointerId);
@@ -410,6 +502,12 @@ export class Canvas {
       this.drawCables();
     } else if (g.kind === 'reveal') {
       if (Math.hypot(e.clientX - g.startX, e.clientY - g.startY) > TAP_SLOP) g.moved = true;
+    } else if (g.kind === 'cell') {
+      if (g.done) return;
+      const dy = g.startY - e.clientY;
+      if (Math.abs(dy) > TAP_SLOP) g.moved = true;
+      // About 150px of travel sweeps the full range, as in the settings grid.
+      if (g.moved) this.setCell(g.id, g.r, g.c, Math.round(Math.min(100, Math.max(0, g.w0 + dy * (100 / 150)))));
     } else if (g.kind === 'module') {
       const dx = (e.clientX - g.startX) / this.view.zoom;
       const dy = (e.clientY - g.startY) / this.view.zoom;
@@ -459,6 +557,10 @@ export class Canvas {
       if (this.revealed.has(g.id)) this.revealed.delete(g.id);
       else this.revealed.add(g.id);
       this.render();
+    } else if (g.kind === 'cell') {
+      clearTimeout(g.timer);
+      // A tap steps through off, low, mid, high.
+      if (!g.moved && !g.done && !cancelled) this.setCell(g.id, g.r, g.c, MARKOV_LEVELS.find((l) => l > g.w0) ?? 0);
     } else if (g.kind === 'module') {
       const card = this.cards.get(g.id)!;
       card.el.classList.remove('dragging');
@@ -512,11 +614,17 @@ export class Canvas {
       j.classList.toggle('can-drop', ok);
       j.classList.toggle('no-drop', !ok);
     }
+    // An output can also be dropped straight onto a setting's slider.
+    if (from.side === 'out') document.body.classList.add('cable-dragging');
     this.onMove(e);
   }
 
   private finishCable(from: JackInfo, e: PointerEvent): void {
-    const target = jackAt(e.clientX, e.clientY);
+    let target = jackAt(e.clientX, e.clientY);
+    if (!target && from.side === 'out') {
+      const ref = modTargetAt(e.clientX, e.clientY);
+      if (ref) target = { ...ref, side: 'in', kind: 'cv' };
+    }
     if (!target || target.side === from.side) return;
     const [out, inp] = from.side === 'out' ? [from, target] : [target, from];
     try {
@@ -530,10 +638,15 @@ export class Canvas {
     const over = jackElAt(e.clientX, e.clientY);
     for (const j of this.el.querySelectorAll('.jack.hover')) if (j !== over) j.classList.remove('hover');
     over?.classList.add('hover');
+    const slider = over || this.gesture?.kind !== 'cable' || this.gesture.from.side !== 'out' ? null : modTargetElAt(e.clientX, e.clientY);
+    for (const el of document.querySelectorAll('.mod-hover')) if (el !== slider) el.classList.remove('mod-hover');
+    slider?.classList.add('mod-hover');
   }
 
   private clearHighlights(): void {
     for (const j of this.el.querySelectorAll('.jack')) j.classList.remove('can-drop', 'no-drop', 'hover');
+    for (const el of document.querySelectorAll('.mod-hover')) el.classList.remove('mod-hover');
+    document.body.classList.remove('cable-dragging');
   }
 
   private hint(text: string): void {
@@ -600,6 +713,24 @@ function jackElAt(x: number, y: number): HTMLElement | null {
     if (el.closest('.node')) return null;
   }
   return null;
+}
+
+/** What a setting's slider says to patch into: the module and the setting's port. */
+export function modTargetAttr(moduleId: string, paramId: string): string {
+  return JSON.stringify({ module: moduleId, port: modPort(paramId) } satisfies PortRef);
+}
+
+function modTargetElAt(x: number, y: number): HTMLElement | null {
+  for (const el of document.elementsFromPoint(x, y)) {
+    const t = el.closest<HTMLElement>('[data-mod-target]');
+    if (t) return t;
+  }
+  return null;
+}
+
+function modTargetAt(x: number, y: number): PortRef | null {
+  const raw = modTargetElAt(x, y)?.dataset.modTarget;
+  return raw ? (JSON.parse(raw) as PortRef) : null;
 }
 
 function jackAt(x: number, y: number): JackInfo | null {

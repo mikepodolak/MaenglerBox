@@ -1,6 +1,8 @@
 import type { AppStore } from '../app/store';
 import { HELP, PATCHING_TIP } from '../modules/help';
 import { getDef } from '../modules/registry';
+import { modParam } from '../patch/model';
+import { fullParamLabel } from '../patch/params';
 import { applyRecipe } from '../patch/recipes';
 import { h } from './dom';
 import { closeAllSheets, openSheet } from './sheet';
@@ -94,7 +96,8 @@ function prettyCable(modules: Record<string, { type: string }>) {
     const [from, to] = c.split('>').map((s) => s.trim().split('.'));
     const name = (key: string, port: string, side: 'inputs' | 'outputs') => {
       const def = getDef(modules[key]?.type ?? '');
-      const label = def?.[side].find((p) => p.id === port)?.label ?? port;
+      const param = side === 'inputs' ? modParam(port) : null;
+      const label = param !== null ? `~ ${def ? fullParamLabel(def, param) : param}` : (def?.[side].find((p) => p.id === port)?.label ?? port);
       return `${def?.label ?? key} ${label}`;
     };
     return `${name(from[0], from[1], 'outputs')} → ${name(to[0], to[1], 'inputs')}`;

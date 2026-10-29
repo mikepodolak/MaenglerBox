@@ -10,7 +10,7 @@ import {
   type Step,
   type StepField,
 } from '../modules/sequencer';
-import { removeModule, setModuleData, setParam } from '../patch/model';
+import { disconnect, exposeParam, hideParam, modPort, removeModule, setCableAmount, setModuleData, setParam } from '../patch/model';
 import {
   applyPreset,
   capturePreset,
@@ -21,7 +21,9 @@ import {
   setLocked,
   usesLibrary,
 } from '../patch/presets';
+import { fullParamLabel } from '../patch/params';
 import type { ModuleDef, ModuleInstance, ParamDef, Patch, Preset } from '../patch/types';
+import { modTargetAttr } from './Canvas';
 import { paramControl, type ParamControl } from './controls';
 import { h } from './dom';
 import { createEditor, type DataEditor } from './editors';
@@ -40,6 +42,7 @@ export class Inspector {
   private steps: StepEditor | null = null;
   private presets: PresetPanel | null = null;
   private editor: DataEditor | null = null;
+  private mods: ModPanel | null = null;
 
   constructor(private readonly store: AppStore) {}
 
@@ -61,13 +64,16 @@ export class Inspector {
     this.presets?.update(m);
     this.steps?.update(m);
     this.editor?.update(m);
+    this.mods?.update(m);
   }
 
-  tick(state: (moduleId: string) => unknown): void {
+  tick(state: (moduleId: string) => unknown, mods?: (moduleId: string) => ReadonlyMap<string, number> | undefined): void {
     if (!this.moduleId) return;
     const s = state(this.moduleId);
     this.steps?.tick(s);
     this.editor?.tick?.(s);
+    const live = mods?.(this.moduleId);
+    for (const [pid, c] of this.controls) c.setMod(live?.get(pid) ?? null);
   }
 
   private build(m: ModuleInstance): void {
@@ -88,6 +94,7 @@ export class Inspector {
             }
           : undefined,
       );
+      c.el.dataset.modTarget = modTargetAttr(m.id, p.id);
       this.controls.set(p.id, c);
       return c.el;
     };
@@ -102,6 +109,7 @@ export class Inspector {
     const stepped = m.type === 'sequencer' || m.type === 'tracker';
     this.steps = stepped ? new StepEditor(this.store, m.id, m.type === 'tracker') : null;
     this.editor = createEditor(this.store, m);
+    this.mods = new ModPanel(this.store, m.id);
     this.presets = def.presets ? new PresetPanel(this.store, m.id, stepped ? 'Patterns' : 'Presets', usesLibrary(def)) : null;
     const mutateAmount = h('input', { type: 'range', min: 1, max: 50, step: 1, 'aria-label': 'Mutate amount' });
     mutateAmount.value = '15';
@@ -151,6 +159,7 @@ export class Inspector {
           ),
         ),
       ),
+      this.mods.el,
     ];
     const nodes = parts.filter((x): x is Node => x !== null);
     // Each section a shade lighter than the one above, so the eye can track where one ends.
@@ -606,4 +615,109 @@ function lockableParams(def: ModuleDef): Map<string, { def: ParamDef; label: str
       return [p.id, { def: p, label: g && /^Operator/.test(g) ? `${short(g)} ${p.label}` : p.label }];
     }),
   );
+}
+
+/**
+ * The settings cables are moving: each one's jack, what's patched into it
+ * and by how much, and a picker to give another setting a jack.
+ */
+class ModPanel {
+  readonly el = h('section', { class: 'section mod-section' });
+  private list = h('div', {});
+  private picker = h('select', { 'aria-label': 'Add a jack for a setting' });
+  private key = '';
+  private amounts = new Map<string, ParamControl>();
+
+  constructor(
+    private readonly store: AppStore,
+    private readonly moduleId: string,
+  ) {
+    this.picker.addEventListener('change', () => {
+      const pid = this.picker.value;
+      this.picker.value = '';
+      if (pid) this.store.update((p) => exposeParam(p, getDef, this.moduleId, pid));
+    });
+    this.el.append(
+      h('h3', {}, 'Modulation'),
+      h('p', { class: 'hint' }, 'Drag any output onto a slider to move that setting with it, or give a setting its own jack here.'),
+      this.list,
+      h('div', { class: 'mod-add' }, this.picker),
+    );
+  }
+
+  update(m: ModuleInstance): void {
+    const def = getDef(m.type)!;
+    const jacks = m.modJacks ?? [];
+    const cables = this.store.patch.cables.filter((c) => c.to.module === m.id && c.to.port.startsWith('@'));
+    const key = `${jacks.join(',')}|${cables.map((c) => `${c.id}:${c.from.module}.${c.from.port}`).join(',')}`;
+    if (key !== this.key) {
+      this.key = key;
+      this.build(def, m, jacks, cables);
+    }
+    for (const c of cables) this.amounts.get(c.id)?.set(c.amount ?? 0);
+  }
+
+  private build(def: ModuleDef, m: ModuleInstance, jacks: string[], cables: Patch['cables']): void {
+    this.amounts.clear();
+    const label = (ref: { module: string; port: string }) => {
+      const src = this.store.patch.modules.find((x) => x.id === ref.module);
+      const sdef = src && getDef(src.type);
+      const port = sdef?.outputs.find((o) => o.id === ref.port)?.label ?? ref.port;
+      return `${sdef?.label ?? '?'} ${port}`;
+    };
+    this.list.replaceChildren(
+      ...jacks.flatMap((pid) => {
+        const p = def.params.find((x) => x.id === pid);
+        if (!p) return [];
+        const into = cables.filter((c) => c.to.port === modPort(pid));
+        return [
+          h(
+            'div',
+            { class: 'mod-row' },
+            h(
+              'div',
+              { class: 'mod-row-head' },
+              h('span', {}, `~ ${fullParamLabel(def, pid)}`),
+              h('button', {
+                class: 'small',
+                title: 'Remove this jack and unplug its cables',
+                onclick: () => this.store.update((x) => hideParam(x, m.id, pid)),
+              }, 'Remove jack'),
+            ),
+            into.length
+              ? null
+              : h('p', { class: 'hint' }, `Patch an output into the ~ ${fullParamLabel(def, pid)} jack on the card.`),
+            ...into.map((c) => {
+              const amount = paramControl(
+                { id: 'amount', label: 'Amount', min: -1, max: 1, default: 0.3, step: 0.01 },
+                c.amount ?? 0,
+                (v) => this.store.update((x) => setCableAmount(x, c.id, v), `amount:${c.id}`),
+              );
+              this.amounts.set(c.id, amount);
+              return h(
+                'div',
+                { class: 'mod-cable' },
+                h('span', {}, `from ${label(c.from)}`),
+                h('button', { class: 'icon', 'aria-label': 'Unplug', title: 'Unplug', onclick: () => this.store.update((x) => disconnect(x, c.id)) }, '×'),
+                amount.el,
+              );
+            }),
+          ),
+        ];
+      }),
+    );
+    const free = def.params.filter((p) => !jacks.includes(p.id));
+    const option = (p: ParamDef) => h('option', { value: p.id }, p.label);
+    const grouped = new Set((def.groups ?? []).flatMap((g) => g.params));
+    this.picker.replaceChildren(
+      h('option', { value: '' }, free.length ? '+ Add a jack for a setting…' : 'Every setting has a jack'),
+      // Listed under the same groups as the settings, so 'Ratio' says which operator.
+      ...(def.groups ?? []).flatMap((g) => {
+        const ps = free.filter((p) => g.params.includes(p.id));
+        return ps.length ? [h('optgroup', { label: g.label }, ...ps.map(option))] : [];
+      }),
+      ...free.filter((p) => !grouped.has(p.id)).map(option),
+    );
+    this.picker.disabled = !free.length;
+  }
 }

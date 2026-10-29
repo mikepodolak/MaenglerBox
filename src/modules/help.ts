@@ -40,7 +40,7 @@ const FM: RecipeModule = { type: 'fm' };
 const toSpeakers = ['fm.out > out.left', 'fm.out > out.right'];
 
 const PORT_KINDS =
-  'Yellow jacks carry gates (timed notes and triggers), teal jacks carry CV (a level that moves), orange jacks carry audio. Any output can go into any input: a gate into a CV input becomes a level that is high while the note plays; CV into a gate input fires each time it rises past halfway.';
+  'Yellow jacks carry gates (timed notes and triggers), teal jacks carry CV (a level that moves), orange jacks carry audio. Any output can go into any input: a gate into a CV input becomes a level that is high while the note plays; CV into a gate input fires each time it rises past halfway. Every setting can take a cable too: in Edit mode drag an output onto any slider (on the card or in its settings) and that setting gets a ~ jack and moves with the signal. Set how far in the settings panel, under Modulation.';
 
 export const PATCHING_TIP = PORT_KINDS;
 
@@ -145,7 +145,7 @@ export const HELP: Record<string, ModuleHelp> = {
     ],
   },
   markov: {
-    about: 'A first-order Markov chain, like the Max matrixctrl → prob patches. Each row of the dial grid is a state; the circles in that row are the odds of moving to each column’s state next (bigger = likelier). On every clock the chain moves and plays the new state: its note, velocity and length, with its own chance of sounding. Each state can also fire one of eight Trig outputs, so the chain can route its states to different synths, like the TRIG column in the Max patch.',
+    about: 'A first-order Markov chain, like the Max matrixctrl → prob patches. Each row of the dial grid is a state; the circles in that row are the odds of moving to each column’s state next (bigger = likelier). On every clock the chain moves and plays the new state: its note, velocity and length, with its own chance of sounding. Each state can also fire one of eight Trig outputs, so the chain can route its states to different synths, like the TRIG column in the Max patch. You can play the grid right on the card: tap a dial to step its weight or drag it up and down; in Play mode, long-press to show the jacks.',
     inputs: { clock: 'Takes one step through the chain.', reset: 'Back to state 1.' },
     outputs: {
       notes: 'Every state that sounds, with its note and velocity. It also carries the state number as a preset number, so states can pick FM presets.',
@@ -244,6 +244,37 @@ export const HELP: Record<string, ModuleHelp> = {
         title: 'Drunk melody',
         text: 'Clock → Sample & Hold in Walk mode → FM Voice: a melody that wanders up and down the scale.',
         recipe: { modules: { clock: CLOCK, self: { type: 'sh', params: { mode: 1, step: 0.12 } }, fm: FM, out: OUT }, cables: ['clock.out > self.trig', 'self.notes > fm.gate', ...toSpeakers] },
+      },
+    ],
+  },
+  lfo: {
+    about: 'A low-frequency oscillator: a slow, repeating wave for moving settings. In Edit mode, drag its Out onto any slider, on a card or in a settings panel, and that setting rides the wave. The slider keeps your value; a teal dot shows where the LFO has moved it. In the settings panel, Modulation sets how far each cable moves its setting, and a negative amount moves it the other way.',
+    inputs: { clock: 'In Sync mode, the clock the LFO follows: one cycle every Cycle ticks.', reset: 'Starts the cycle again from the top.' },
+    outputs: { out: 'The wave, −1 to 1 (or 0 to 1 with Range set that way).' },
+    settings: {
+      shape: 'Sine and Triangle swing smoothly; Ramps rise or fall then jump back; Square flips; Random holds a new value each cycle; Smooth random glides between them.',
+      mode: 'Free runs at Rate. Sync to clock follows the Clock input.',
+      rate: 'Cycles per second in Free mode.',
+      sync: 'In Sync mode, how many clock ticks one cycle lasts.',
+      polarity: '−1 to 1 swings the setting both ways around where you set it; 0 to 1 only pushes it up.',
+      level: 'Scales the whole wave.',
+    },
+    ideas: [
+      {
+        title: 'Breathing FM',
+        text: 'An LFO on the FM Voice’s operator 2 ratio and level makes each note’s tone shift over time.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, self: { type: 'lfo', params: { rate: 0.25 } }, fm: FM, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'self.out > fm.@op2Ratio', 'self.out > fm.@op2Level', ...toSpeakers],
+        },
+      },
+      {
+        title: 'Wobble in time',
+        text: 'Set Timing to Sync to clock and Cycle to 16 clocks: Feedback opens and closes once a bar, locked to the beat.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, self: { type: 'lfo', params: { mode: 1, sync: 9, shape: 1 } }, fm: FM, out: OUT },
+          cables: ['clock.out > seq.clock', 'clock.out > self.clock', 'seq.out > fm.gate', 'self.out > fm.@feedback', ...toSpeakers],
+        },
       },
     ],
   },

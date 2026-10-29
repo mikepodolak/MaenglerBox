@@ -89,6 +89,8 @@ export interface ModuleInstance {
   locks?: string[];
   /** Card width on the canvas, for resizable (visual) modules. */
   width?: number;
+  /** Params given a jack on the card so a cable can modulate them, in the order added. */
+  modJacks?: string[];
 }
 
 export interface Preset {
@@ -106,6 +108,11 @@ export interface Cable {
   id: string;
   from: PortRef;
   to: PortRef;
+  /**
+   * For a cable into a setting: how far the signal moves it, as a share of the
+   * slider's travel per unit of signal (-1..1; negative turns it the other way).
+   */
+  amount?: number;
 }
 
 export interface Patch {

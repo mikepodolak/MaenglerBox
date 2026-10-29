@@ -10,6 +10,8 @@ export interface ParamControl {
   set(value: number): void;
   /** Show whether the param is locked against randomize. */
   setLocked(locked: boolean): void;
+  /** Show where a cable is moving the setting right now, or null when nothing is. */
+  setMod(value: number | null): void;
 }
 
 /** Small padlock toggle shown before a param's label. */
@@ -57,7 +59,17 @@ export function paramControl(
       if (document.activeElement !== select) select.value = String(Math.round(v));
     };
     set(value);
-    return { el: h('label', { class: `${cls} choice` }, label(), select), set, setLocked };
+    const el = h('label', { class: `${cls} choice` }, label(), select);
+    let shown: number | null = null;
+    // A choice can't show a moving marker, so the option the cable has picked is named beside it.
+    const setMod = (v: number | null) => {
+      if (v === shown) return;
+      shown = v;
+      el.classList.toggle('modded', v !== null);
+      if (v === null) delete el.dataset.live;
+      else el.dataset.live = `→ ${formatParam(p, v)}`;
+    };
+    return { el, set, setLocked, setMod };
   }
 
   const slider = h('input', { type: 'range', min: 0, max: STEPS, step: 1, 'aria-label': p.label });
@@ -72,10 +84,24 @@ export function paramControl(
   });
   // Double-tap returns to default, a common convention in synth UIs.
   slider.addEventListener('dblclick', () => onChange(p.default));
+  let base = value;
+  let live: number | null = null;
   const set = (v: number) => {
-    readout.textContent = formatParam(p, v);
+    base = v;
+    readout.textContent = formatParam(p, live ?? v);
     if (!dragging) slider.value = String(Math.round(toNormalized(p, v) * STEPS));
   };
   set(value);
-  return { el: h('label', { class: cls }, label(), slider, readout), set, setLocked };
+  // The thumb stays where you set it; a marker on the track shows where cables have moved it to.
+  const mark = h('i', { class: 'mod-mark', 'aria-hidden': 'true' });
+  const track = h('span', { class: 'slider-wrap' }, slider, mark);
+  const el = h('label', { class: cls }, label(), track, readout);
+  const setMod = (v: number | null) => {
+    if (v === live) return;
+    live = v;
+    el.classList.toggle('modded', v !== null);
+    if (v !== null) track.style.setProperty('--mod', String(toNormalized(p, v)));
+    readout.textContent = formatParam(p, v ?? base);
+  };
+  return { el, set, setLocked, setMod };
 }

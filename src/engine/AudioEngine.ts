@@ -1,6 +1,7 @@
 import { allWorklets, getModuleType } from '../modules/registry';
 import type { Patch, PresetLibrary } from '../patch/types';
 import { CONVERT_WORKLETS } from './convert';
+import { MOD_RATE_HZ } from './modulation';
 import { PatchRuntime } from './PatchRuntime';
 import { Scheduler } from './Scheduler';
 
@@ -24,6 +25,7 @@ export class AudioEngine {
   private master: AudioNode | null = null;
   private recorder: MediaRecorder | null = null;
   private recordStart = 0;
+  private modTimer: ReturnType<typeof setInterval> | null = null;
   private listeners = new Set<(s: EngineState) => void>();
   state: EngineState = 'off';
 
@@ -72,6 +74,8 @@ export class AudioEngine {
       return;
     }
     this.scheduler!.start();
+    // Cables into settings are applied on a timer of their own, so they keep moving when the screen isn't redrawing.
+    this.modTimer ??= setInterval(() => this.runtime?.modulate(), 1000 / MOD_RATE_HZ);
     this.ready = true;
     this.runtime!.setLibrary(this.library);
     if (this.pending) this.runtime!.sync(this.pending);
@@ -148,6 +152,11 @@ export class AudioEngine {
   }
 
   /** Live UI state of a module, or undefined when audio isn't running. */
+  /** Settings that cables are moving right now, and their current values. */
+  modValues(moduleId: string): ReadonlyMap<string, number> | undefined {
+    return this.runtime?.modValues(moduleId);
+  }
+
   moduleState(moduleId: string): unknown {
     if (!this.ctx || !this.runtime) return undefined;
     return this.runtime.getState(moduleId, this.ctx.currentTime);
