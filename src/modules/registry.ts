@@ -3,6 +3,7 @@ import { clock, envelope, oscillator, output, vca } from './core';
 import { balls } from './balls';
 import { fmVoice } from './fmVoice';
 import { chanceGate, euclid, probability, sampleHold, turing } from './generative';
+import { lfo } from './lfo';
 import { life } from './life';
 import { markov } from './markov';
 import { multiTracker } from './multiTracker';
@@ -19,7 +20,7 @@ for (const t of [
   clock, sequencer, multiTracker, euclid, turing,
   chanceGate, probability, markov, balls, life,
   fmVoice, oscillator,
-  envelope, sampleHold,
+  envelope, lfo, sampleHold,
   vca, output,
 ]) register(t);
 

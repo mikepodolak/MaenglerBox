@@ -1,5 +1,6 @@
+import { fromNormalized, toNormalized } from './params';
 import { normalizePresets } from './presets';
-import type { Cable, ModuleDef, ModuleInstance, Patch, PortDef, PortKind, PortRef } from './types';
+import type { Cable, ModuleDef, ModuleInstance, ParamDef, Patch, PortDef, PortKind, PortRef } from './types';
 
 /** Lookup for module definitions; the patch model never touches audio. */
 export type DefLookup = (type: string) => ModuleDef | undefined;
@@ -77,6 +78,65 @@ export function canConnect(_from: PortKind, _to: PortKind): boolean {
   return true;
 }
 
+/**
+ * Every setting can take a cable. Its input port is the param id with this
+ * prefix ('@ratio'), so settings cables live alongside ordinary ones.
+ */
+export const MOD_PREFIX = '@';
+export const DEFAULT_MOD_AMOUNT = 0.3;
+
+export function modPort(paramId: string): string {
+  return MOD_PREFIX + paramId;
+}
+
+/** The param a settings port modulates, or null for an ordinary input. */
+export function modParam(port: string): string | null {
+  return port.startsWith(MOD_PREFIX) ? port.slice(MOD_PREFIX.length) : null;
+}
+
+/** The input port for a settings jack, so it can be drawn and patched like any other. */
+export function modPortDef(p: ParamDef): PortDef {
+  return { id: modPort(p.id), label: p.label, kind: 'cv' };
+}
+
+/**
+ * A setting's value under modulation: `sum` is the signal times each cable's
+ * amount, added along the slider's travel (so exponential sliders like Ratio
+ * sweep evenly), then clamped and snapped like a slider move.
+ */
+export function modulatedValue(p: ParamDef, base: number, sum: number): number {
+  return fromNormalized(p, toNormalized(p, base) + sum);
+}
+
+/** Give a setting a jack on its card. */
+export function exposeParam(patch: Patch, defs: DefLookup, moduleId: string, paramId: string): Patch {
+  const mod = findModule(patch, moduleId);
+  if (!defs(mod.type)?.params.some((p) => p.id === paramId)) throw new PatchError(`Unknown param ${paramId} on ${mod.type}`);
+  if (mod.modJacks?.includes(paramId)) return patch;
+  return touch(patch, {
+    modules: patch.modules.map((m) => (m.id === moduleId ? { ...m, modJacks: [...(m.modJacks ?? []), paramId] } : m)),
+  });
+}
+
+/** Take a setting's jack off its card, unplugging whatever was patched into it. */
+export function hideParam(patch: Patch, moduleId: string, paramId: string): Patch {
+  const port = modPort(paramId);
+  return touch(patch, {
+    modules: patch.modules.map((m) => {
+      if (m.id !== moduleId) return m;
+      const modJacks = (m.modJacks ?? []).filter((id) => id !== paramId);
+      const { modJacks: _, ...rest } = m;
+      return modJacks.length ? { ...rest, modJacks } : rest;
+    }),
+    cables: patch.cables.filter((c) => !(c.to.module === moduleId && c.to.port === port)),
+  });
+}
+
+export function setCableAmount(patch: Patch, cableId: string, amount: number): Patch {
+  const a = Math.min(1, Math.max(-1, amount));
+  return touch(patch, { cables: patch.cables.map((c) => (c.id === cableId ? { ...c, amount: a } : c)) });
+}
+
 export function connect(patch: Patch, defs: DefLookup, from: PortRef, to: PortRef): [Patch, Cable] {
   const out = findPort(patch, defs, from, 'outputs');
   const inp = findPort(patch, defs, to, 'inputs');
@@ -87,7 +147,12 @@ export function connect(patch: Patch, defs: DefLookup, from: PortRef, to: PortRe
   const existing = patch.cables.find((c) => samePort(c.from, from) && samePort(c.to, to));
   if (existing) return [patch, existing];
   const cable: Cable = { id: newId('cable'), from: { ...from }, to: { ...to } };
-  return [touch(patch, { cables: [...patch.cables, cable] }), cable];
+  const param = modParam(to.port);
+  if (param === null) return [touch(patch, { cables: [...patch.cables, cable] }), cable];
+  // A cable dropped on a setting gives that setting a jack, so the cable has somewhere to plug in.
+  cable.amount = DEFAULT_MOD_AMOUNT;
+  const exposed = exposeParam(patch, defs, to.module, param);
+  return [touch(exposed, { cables: [...exposed.cables, cable] }), cable];
 }
 
 export function disconnect(patch: Patch, cableId: string): Patch {
@@ -104,6 +169,12 @@ function findPort(patch: Patch, defs: DefLookup, ref: PortRef, side: 'inputs' | 
   const mod = findModule(patch, ref.module);
   const def = defs(mod.type);
   if (!def) throw new PatchError(`Unknown module type ${mod.type}`);
+  const param = side === 'inputs' ? modParam(ref.port) : null;
+  if (param !== null) {
+    const p = def.params.find((x) => x.id === param);
+    if (!p) throw new PatchError(`${mod.type} has no setting ${param}`);
+    return modPortDef(p);
+  }
   const port = def[side].find((p) => p.id === ref.port);
   if (!port) throw new PatchError(`${mod.type} has no ${side === 'inputs' ? 'input' : 'output'} ${ref.port}`);
   return port;
@@ -139,6 +210,10 @@ export function deserializePatch(json: unknown, defs: DefLookup): Patch {
     const presets = normalizePresets(m.presets, def.data?.normalize);
     if (presets) mod.presets = presets;
     if (typeof m.width === 'number' && Number.isFinite(m.width)) mod.width = Math.min(MAX_CARD_WIDTH, Math.max(MIN_CARD_WIDTH, m.width));
+    if (Array.isArray(m.modJacks)) {
+      const jacks = [...new Set(m.modJacks.filter((id): id is string => typeof id === 'string' && id in params))];
+      if (jacks.length) mod.modJacks = jacks;
+    }
     if (Array.isArray(m.locks)) mod.locks = m.locks.filter((id): id is string => typeof id === 'string' && id in params);
     modules.push(mod);
   }
@@ -153,7 +228,11 @@ export function deserializePatch(json: unknown, defs: DefLookup): Patch {
   for (const c of json.cables) {
     if (!isObject(c) || !isPortRef(c.from) || !isPortRef(c.to)) continue;
     try {
-      [patch] = connect(patch, defs, c.from, c.to);
+      let cable: Cable;
+      [patch, cable] = connect(patch, defs, c.from, c.to);
+      if (cable.amount !== undefined && typeof c.amount === 'number' && Number.isFinite(c.amount)) {
+        patch = setCableAmount(patch, cable.id, c.amount);
+      }
     } catch {
       // Dangling or invalid cable: skip it.
     }

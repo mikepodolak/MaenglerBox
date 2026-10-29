@@ -1723,3 +1723,101 @@ a.button {
   background: hsl(var(--hue) 90% 62%);
   box-shadow: 0 0 8px hsl(var(--hue) 90% 60%);
 }
+
+/* ---- cables into settings ---- */
+
+.slider-wrap {
+  position: relative;
+  display: grid;
+  align-items: center;
+}
+
+.mod-mark {
+  display: none;
+  position: absolute;
+  top: 50%;
+  /* Range thumbs sit inset by about half their width at each end. */
+  left: calc(10px + (100% - 20px) * var(--mod, 0));
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--cv, #4fd1c5);
+  box-shadow: 0 0 0 2px var(--panel);
+  pointer-events: none;
+}
+
+.param.modded .mod-mark {
+  display: block;
+}
+
+.param.modded output {
+  color: var(--cv, #4fd1c5);
+}
+
+.param.choice.modded::after {
+  content: attr(data-live);
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--cv, #4fd1c5);
+}
+
+/* While a cable is being dragged, every setting it could land on is outlined. */
+.cable-dragging [data-mod-target] {
+  outline: 1px dashed var(--line);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+[data-mod-target].mod-hover {
+  outline: 2px solid var(--cv, #4fd1c5);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.port-row.mod span:last-child::before {
+  content: '~ ';
+  color: var(--cv, #4fd1c5);
+}
+
+.cable.mod {
+  stroke-dasharray: 6 4;
+}
+
+.mod-section .mod-row {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.mod-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.mod-cable {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13px;
+}
+
+.mod-cable .param {
+  grid-column: 1 / -1;
+}
+
+.mod-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.mod-add select {
+  flex: 1;
+}

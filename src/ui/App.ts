@@ -128,8 +128,9 @@ export class App {
     const state = (id: string) => this.engine.moduleState(id);
     const frame = () => {
       if (this.engine.state === 'running') {
-        this.canvas.tick(state);
-        this.inspector.tick(state);
+        const mods = (id: string) => this.engine.modValues(id);
+        this.canvas.tick(state, mods);
+        this.inspector.tick(state, mods);
       }
       if (this.engine.recording) this.paintRec();
       requestAnimationFrame(frame);

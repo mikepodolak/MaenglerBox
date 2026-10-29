@@ -1,4 +1,4 @@
-import type { ParamDef } from './types';
+import type { ModuleDef, ParamDef } from './types';
 
 /** Map a param value to a 0..1 control position (respects exponential curves). */
 export function toNormalized(p: ParamDef, value: number): number {
@@ -20,4 +20,16 @@ export function formatParam(p: ParamDef, value: number): string {
   if (p.options) return p.options[Math.round(value - p.min)] ?? String(value);
   const digits = p.step && p.step >= 1 ? 0 : Math.abs(value) >= 100 ? 0 : Math.abs(value) >= 10 ? 1 : 3;
   return `${value.toFixed(digits)}${p.unit ? ` ${p.unit}` : ''}`;
+}
+
+/**
+ * A param's label, with its group in front when the label alone is ambiguous
+ * (the FM Voice has a Ratio per operator): 'Operator 2 Ratio'.
+ */
+export function fullParamLabel(def: ModuleDef, id: string): string {
+  const p = def.params.find((x) => x.id === id);
+  if (!p) return id;
+  if (def.params.filter((x) => x.label === p.label).length < 2) return p.label;
+  const g = def.groups?.find((x) => x.params.includes(id));
+  return g ? `${g.label.replace(/\s*\(.*\)$/, '')} ${p.label}` : p.label;
 }

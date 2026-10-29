@@ -1,4 +1,5 @@
 import { EUCLID_COLORS, EUCLID_RINGS, euclidHit, ringSettings, turingLoop } from '../modules/generative';
+import { lfoShape } from '../dsp/lfo';
 import { LIFE_COLS, LIFE_ROWS } from '../modules/life';
 import type { MarkovData } from '../modules/markov';
 import type { SequencerData } from '../modules/sequencer';
@@ -17,6 +18,7 @@ export function createFace(m: ModuleInstance): Face | null {
   if (m.type === 'sequencer') return sequencerFace();
   if (m.type === 'euclid') return euclidFace();
   if (m.type === 'markov') return markovFace();
+  if (m.type === 'lfo') return lfoFace();
   if (m.type === 'turing') return turingFace();
   if (m.type === 'random') return probabilityFace();
   if (m.type === 'chance') return chanceFace();
@@ -86,6 +88,60 @@ function liveCanvas(cls: string, aspect: number) {
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, w, hgt);
       return { g, w, h: hgt };
+    },
+  };
+}
+
+/** One cycle of the wave, with a dot riding it where the LFO is now. */
+function lfoFace(): Face {
+  const c = liveCanvas('lfo-face', 3);
+  // Fixed random steps, so the random shapes have something to show.
+  const steps = [0.2, -0.7, 0.9, -0.1, 0.5, -0.9, 0.1, 0.7, -0.4];
+  const at = (shape: number, x: number) => {
+    if (shape < 5) return lfoShape(shape, x);
+    const i = Math.min(steps.length - 2, Math.floor(x * 4));
+    return lfoShape(shape, x * 4 - i, steps[i], steps[i + 1]);
+  };
+  let shape = -1;
+  let phase = 0;
+  const draw = () => {
+    const d = c.begin();
+    if (!d || shape < 0) return;
+    const pad = 6;
+    const y = (v: number) => d.h / 2 - v * (d.h / 2 - pad);
+    d.g.strokeStyle = '#3a3e46';
+    d.g.lineWidth = 1;
+    d.g.beginPath();
+    d.g.moveTo(0, d.h / 2);
+    d.g.lineTo(d.w, d.h / 2);
+    d.g.stroke();
+    d.g.strokeStyle = '#4fd1c5';
+    d.g.lineWidth = 2;
+    d.g.beginPath();
+    for (let i = 0; i <= 120; i++) {
+      const x = i / 120;
+      const px = x * d.w;
+      if (i) d.g.lineTo(px, y(at(shape, x)));
+      else d.g.moveTo(px, y(at(shape, x)));
+    }
+    d.g.stroke();
+    // Random shapes repeat four steps across the drawing, so the dot follows one of them.
+    const x = shape < 5 ? phase : phase / 4;
+    d.g.fillStyle = '#ffffff';
+    d.g.beginPath();
+    d.g.arc(x * d.w, y(at(shape, x)), 4, 0, Math.PI * 2);
+    d.g.fill();
+  };
+  return {
+    el: c.el,
+    update(m) {
+      shape = Math.round(m.params.shape);
+      requestAnimationFrame(draw);
+    },
+    tick(state) {
+      const s = state as { phase?: number } | undefined;
+      phase = s?.phase ?? 0;
+      draw();
     },
   };
 }
