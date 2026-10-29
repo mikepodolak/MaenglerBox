@@ -73,10 +73,13 @@ export class Inspector {
         m.params[p.id],
         (v) => this.store.update((x) => setParam(x, getDef, m.id, p.id, v), `param:${m.id}:${p.id}`),
         false,
-        () => {
-          const locked = !(this.current()?.locks ?? []).includes(p.id);
-          this.store.update((x) => setLocked(x, m.id, p.id, locked));
-        },
+        // Padlocks only matter where there's a Randomize button.
+        def.presets
+          ? () => {
+              const locked = !(this.current()?.locks ?? []).includes(p.id);
+              this.store.update((x) => setLocked(x, m.id, p.id, locked));
+            }
+          : undefined,
       );
       this.controls.set(p.id, c);
       return c.el;
@@ -91,7 +94,7 @@ export class Inspector {
 
     const stepped = m.type === 'sequencer' || m.type === 'tracker';
     this.steps = stepped ? new StepEditor(this.store, m.id, m.type === 'tracker') : null;
-    this.presets = new PresetPanel(this.store, m.id, stepped ? 'Patterns' : 'Presets', usesLibrary(def));
+    this.presets = def.presets ? new PresetPanel(this.store, m.id, stepped ? 'Patterns' : 'Presets', usesLibrary(def)) : null;
     const mutateAmount = h('input', { type: 'range', min: 1, max: 50, step: 1, 'aria-label': 'Mutate amount' });
     mutateAmount.value = '15';
     const randomizeBar = h(
@@ -120,20 +123,30 @@ export class Inspector {
         h('button', { class: 'icon', 'aria-label': 'Close', onclick: () => this.store.select(null) }, '×'),
       ),
       def.description ? h('p', { class: 'inspector-desc' }, def.description) : null,
-      this.presets.el,
+      this.presets?.el ?? null,
+      this.steps?.patternEl ?? null,
       this.steps?.el ?? null,
-      h('section', { class: 'randomize' }, h('h3', {}, 'Settings'), randomizeBar,
-        h('p', { class: 'hint' }, 'Tap a padlock to keep that setting when randomizing.')),
-      ...groups.map((g, i) =>
-        h(
-          'details',
-          { class: 'param-group', open: i === 0 || groups.length <= 2 },
-          h('summary', {}, g.label || 'Settings'),
-          ...g.params.map(control),
+      h(
+        'section',
+        { class: 'section settings' },
+        h('h3', {}, 'Settings'),
+        def.presets ? randomizeBar : null,
+        def.presets ? h('p', { class: 'hint' }, 'Tap a padlock to keep that setting when randomizing.') : null,
+        ...groups.map((g, i) =>
+          h(
+            'details',
+            { class: 'param-group', open: i === 0 || groups.length <= 2 },
+            h('summary', {}, g.label || 'Settings'),
+            ...g.params.map(control),
+          ),
         ),
       ),
     ];
-    this.el.replaceChildren(...parts.filter((x): x is Node => x !== null));
+    const nodes = parts.filter((x): x is Node => x !== null);
+    // Each section a shade lighter than the one above, so the eye can track where one ends.
+    nodes.filter((n): n is HTMLElement => n instanceof HTMLElement && n.classList.contains('section'))
+      .forEach((el, i) => el.style.setProperty('--shade', String(i)));
+    this.el.replaceChildren(...nodes);
     this.el.scrollTop = 0;
   }
 
@@ -150,7 +163,9 @@ type SlotAction = 'load' | 'save' | 'clear';
  * step values can call up), shared by every patch through the library.
  */
 class PresetPanel {
-  readonly el = h('section', { class: 'presets' });
+  /** Collapsed by default: slots are used now and then, and they take a lot of room. */
+  readonly el = h('details', { class: 'presets section' });
+  private count = h('span', { class: 'count' });
   private action: SlotAction = 'load';
   private slots: HTMLButtonElement[] = [];
   private actionBtns = new Map<SlotAction, HTMLButtonElement>();
@@ -180,7 +195,8 @@ class PresetPanel {
       grid.append(b);
     }
     this.el.append(
-      h('div', { class: 'presets-head' }, h('h3', {}, title), actions),
+      h('summary', {}, h('h3', {}, title), this.count),
+      h('div', { class: 'presets-head' }, h('span', { class: 'hint' }, 'Pick an action, then tap a slot.'), actions),
       grid,
     );
     if (shared) this.el.append(h('p', { class: 'hint' }, 'Shared by every patch on this device.'));
@@ -219,6 +235,8 @@ class PresetPanel {
 
   private paint(): void {
     for (const [a, b] of this.actionBtns) b.setAttribute('aria-pressed', String(a === this.action));
+    const used = this.bank().filter(Boolean).length;
+    this.count.textContent = used ? `${used} saved` : 'empty';
     this.el.dataset.action = this.action;
     this.slots.forEach((b, i) => {
       const p = this.bank()[i];
@@ -237,14 +255,18 @@ const STEP_PARAMS: { key: keyof Step; label: string; def: ParamDef }[] = [
 
 /**
  * Step grid. Tap a step to select it, tap it again to switch it on or off.
- * The selected step's details sit below the grid, tracker style.
+ * The selected step's details open below the grid; nothing is open until a
+ * step is picked. Pattern-wide randomizing lives in `patternEl`, which the
+ * inspector places above the steps.
  */
 class StepEditor {
-  readonly el = h('section', { class: 'steps' });
+  readonly el = h('section', { class: 'steps section' });
+  readonly patternEl = h('section', { class: 'pattern-tools section' });
   private grid = h('div', { class: 'step-grid' });
   private detail = h('div', { class: 'step-detail' });
   private cells: HTMLButtonElement[] = [];
-  private selected = 0;
+  /** Selected step, or -1 for none. */
+  private selected = -1;
   private lastPlaying = -1;
   private data: SequencerData | null = null;
   private len = 16;
@@ -294,16 +316,24 @@ class StepEditor {
       this.edit({ plocks: { ...this.step().plocks, [id]: this.target.module.params[id] } });
     });
     this.tracker = new Tracker(
-      (i) => {
-        this.selected = i;
-        this.paint();
-      },
+      (i) => this.select(i),
       (i, change, key) => this.edit(change, key, i),
     );
     this.detail.append(
-      h('div', { class: 'step-detail-head' }, this.title,
-        h('button', { onclick: () => this.randomize(1, [this.selected]), title: 'Randomize this step' }, 'Randomize step'),
-        this.onBtn),
+      h(
+        'div',
+        { class: 'step-detail-head' },
+        h('button', {
+          class: 'icon dice',
+          'aria-label': 'Randomize this step',
+          title: 'Randomize this step',
+          onclick: () => this.randomize(1, [this.selected]),
+        }, '🎲'),
+        this.title,
+        h('span', { class: 'spacer' }),
+        this.onBtn,
+        h('button', { class: 'icon', 'aria-label': 'Close step', onclick: () => this.select(-1) }, '×'),
+      ),
       h('div', { class: 'note-row' }, h('span', { class: 'param-label' }, 'Note'), nudge(-12), nudge(-1), this.noteLabel, nudge(1), nudge(12)),
       h('div', { class: 'ratchet-row' }, h('span', { class: 'param-label' }, 'Ratchet'), ...this.ratchetBtns),
       ...[...this.stepControls.values()].map((c) => c.el),
@@ -328,9 +358,10 @@ class StepEditor {
     const patternBar = h(
       'div',
       { class: 'randomize-bar' },
-      h('button', { onclick: () => this.randomize(1) }, 'Randomize pattern'),
-      h('button', { onclick: () => this.randomize(0.15) }, 'Mutate pattern'),
+      h('button', { onclick: () => this.randomize(1), title: 'New random steps, kept in the scale' }, 'Randomize'),
+      h('button', { onclick: () => this.randomize(0.15), title: 'Nudge the steps a little' }, 'Mutate'),
     );
+    this.patternEl.append(h('h3', {}, multi ? 'Randomize track' : 'Randomize pattern'), patternBar, fieldLocks);
     const views = h('div', { class: 'segmented small', role: 'group', 'aria-label': 'Step view' });
     for (const [v, label] of [['grid', 'Grid'], ['tracker', 'Tracker']] as const) {
       const b = h('button', { 'aria-pressed': 'false', onclick: () => this.store.setPref('stepView', v) }, label);
@@ -371,8 +402,6 @@ class StepEditor {
       this.grid,
       this.overview?.el ?? this.tracker.el,
       this.detail,
-      patternBar,
-      fieldLocks,
     );
   }
 
@@ -382,16 +411,13 @@ class StepEditor {
     this.settings = m.params;
     this.target = lockTarget(this.store.patch, m.id, this.multi ? trackPort(this.track) : 'out');
     this.len = Math.round(m.params.length);
-    if (this.selected >= this.len) this.selected = 0;
+    if (this.selected >= this.len) this.selected = -1;
     while (this.cells.length < this.len) {
       const i = this.cells.length;
       const cell = h('button', { class: 'step', 'aria-label': `Step ${i + 1}` });
       cell.addEventListener('click', () => {
         if (this.selected === i) this.edit({ on: !this.step().on });
-        else {
-          this.selected = i;
-          this.paint();
-        }
+        else this.select(i);
       });
       this.cells.push(cell);
       this.grid.append(cell);
@@ -411,7 +437,12 @@ class StepEditor {
   }
 
   private step(): Step {
-    return this.data!.steps[this.selected];
+    return this.data!.steps[Math.max(0, this.selected)];
+  }
+
+  private select(i: number): void {
+    this.selected = i;
+    this.paint();
   }
 
   private paint(): void {
@@ -425,18 +456,25 @@ class StepEditor {
       if (s.ratchet > 1 && s.on) c.dataset.ratchet = `${s.ratchet}×`;
       else delete c.dataset.ratchet;
     });
+    const locks = new Set(this.data.locks ?? []);
+    for (const [f, b] of this.fieldLockBtns) b.setAttribute('aria-pressed', String(locks.has(f)));
+    this.paintView();
+    this.detail.hidden = this.selected < 0;
+    if (this.selected < 0) return;
+
     const s = this.step();
-    this.title.textContent = `Step ${this.selected + 1}`;
+    this.title.textContent = this.multi ? `Track ${this.track + 1} · Step ${this.selected + 1}` : `Step ${this.selected + 1}`;
     this.onBtn.textContent = s.on ? 'On' : 'Off';
     this.onBtn.classList.toggle('active', s.on);
     this.noteLabel.textContent = noteName(s.note);
     this.ratchetBtns.forEach((b, i) => b.classList.toggle('active', s.ratchet === i + 1));
     for (const [key, c] of this.stepControls) c.set(s[key] as number);
     this.sendLabel.textContent = s.send ? `P${s.send}` : '—';
-    const locks = new Set(this.data.locks ?? []);
-    for (const [f, b] of this.fieldLockBtns) b.setAttribute('aria-pressed', String(locks.has(f)));
     if (document.activeElement !== this.condSelect) this.condSelect.value = s.cond;
+    this.paintLocks(s);
+  }
 
+  private paintView(): void {
     const view = this.store.prefs.stepView;
     for (const [v, b] of this.viewBtns) b.setAttribute('aria-pressed', String(v === view));
     this.grid.hidden = view !== 'grid';
@@ -446,12 +484,10 @@ class StepEditor {
       this.trackPicker!.hidden = view === 'tracker';
       if (view === 'tracker') this.overview.update(this.module!.data as MultiTrackerData, this.len, this.track, this.selected);
       this.trackBtns.forEach((b, t) => b.setAttribute('aria-pressed', String(t === this.track)));
-      this.title.textContent = `Track ${this.track + 1} · Step ${this.selected + 1}`;
     } else {
       this.tracker.el.hidden = view !== 'tracker';
-      if (view === 'tracker') this.tracker.update(this.data, this.len, this.selected);
+      if (view === 'tracker') this.tracker.update(this.data!, this.len, this.selected);
     }
-    this.paintLocks(s);
   }
 
   /** One slider per locked setting, plus a picker for the settings of the synth this sequencer plays. */

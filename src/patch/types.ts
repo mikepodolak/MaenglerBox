@@ -56,6 +56,11 @@ export interface ModuleDef {
    * (a sequencer's pattern bank belongs to its song).
    */
   presetScope?: 'library' | 'patch';
+  /**
+   * Instruments and sequencers get preset slots and randomize. Utilities
+   * (output, VCA, clock) leave it off to keep their panel short.
+   */
+  presets?: boolean;
 }
 
 /** Shared preset banks, one per module type. */
