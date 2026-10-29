@@ -20,7 +20,51 @@ export interface Step {
   length: number;
   /** Number sent with the step's notes, 0 = none. A synth uses 1–16 to pick a preset for that note. */
   send: number;
+  /** Trig condition, one of CONDITIONS ('' = always). */
+  cond: string;
+  /** Parameter locks: settings of the synth this step plays, overridden for this step's notes only. */
+  plocks: Record<string, number>;
 }
+
+/**
+ * Trig conditions, Elektron/M8 style. 'A:B' plays on the A-th of every B loops.
+ * 'pre' plays when the previous on-step played, 'first' only on the first loop.
+ */
+export const CONDITIONS: { id: string; label: string }[] = [
+  { id: '', label: 'Always' },
+  ...[2, 3, 4, 8].flatMap((b) => Array.from({ length: b }, (_, i) => ({ id: `${i + 1}:${b}`, label: `${i + 1}:${b}` }))),
+  { id: 'first', label: 'First loop' },
+  { id: '!first', label: 'Not first' },
+  { id: 'pre', label: 'If prev played' },
+  { id: '!pre', label: 'If prev silent' },
+  { id: 'fill', label: 'Fill' },
+  { id: '!fill', label: 'Not fill' },
+];
+const CONDITION_IDS = new Set(CONDITIONS.map((c) => c.id));
+
+/** Short label for tight spaces such as tracker cells. */
+export function conditionLabel(id: string): string {
+  if (!id) return '';
+  if (id === 'first') return '1st';
+  if (id === '!first') return '!1st';
+  return id.toUpperCase();
+}
+
+/** Whether a step's condition lets it play on `loop` (0-based). */
+export function conditionPasses(cond: string, loop: number, prevPlayed: boolean, fill = false): boolean {
+  if (!cond) return true;
+  if (cond === 'first') return loop === 0;
+  if (cond === '!first') return loop !== 0;
+  if (cond === 'pre') return prevPlayed;
+  if (cond === '!pre') return !prevPlayed;
+  if (cond === 'fill') return fill;
+  if (cond === '!fill') return !fill;
+  const [a, b] = cond.split(':').map(Number);
+  return b > 0 ? loop % b === a - 1 : true;
+}
+
+/** Max param locks on one step. */
+export const MAX_PLOCKS = 8;
 
 export const STEP_FIELDS = ['on', 'note', 'velocity', 'chance', 'ratchet', 'length', 'send'] as const;
 export type StepField = (typeof STEP_FIELDS)[number];
@@ -44,7 +88,17 @@ export const SCALES: { name: string; intervals: number[] }[] = [
 export function defaultStep(i: number): Step {
   // A sparse starting groove so the first patch is already musical.
   const on = [0, 3, 6, 8, 11, 14].includes(i % 16);
-  return { on, note: 48 + ([0, 7, 3, 12, 10, 5][i % 6] ?? 0), velocity: 0.8, chance: i % 4 === 0 ? 1 : 0.7, ratchet: 1, length: 0.5, send: 0 };
+  return {
+    on,
+    note: 48 + ([0, 7, 3, 12, 10, 5][i % 6] ?? 0),
+    velocity: 0.8,
+    chance: i % 4 === 0 ? 1 : 0.7,
+    ratchet: 1,
+    length: 0.5,
+    send: 0,
+    cond: '',
+    plocks: {},
+  };
 }
 
 const clamp = (v: unknown, lo: number, hi: number, fallback: number) =>
@@ -67,6 +121,8 @@ export const sequencerData: ModuleDataDef<SequencerData> = {
           ratchet: Math.round(clamp(s.ratchet, 1, 4, d.ratchet)),
           length: clamp(s.length, 0.05, 1, d.length),
           send: Math.round(clamp(s.send, 0, 16, d.send)),
+          cond: typeof s.cond === 'string' && CONDITION_IDS.has(s.cond) ? s.cond : '',
+          plocks: normalizePlocks(s.plocks),
         };
       }),
       locks: Array.isArray((raw as SequencerData | null)?.locks)
@@ -75,6 +131,15 @@ export const sequencerData: ModuleDataDef<SequencerData> = {
     };
   },
 };
+
+function normalizePlocks(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (typeof raw !== 'object' || raw === null) return out;
+  for (const [k, v] of Object.entries(raw).slice(0, MAX_PLOCKS)) {
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
+}
 
 export interface StepRandomizeOptions {
   /** 1 = fully random; below 1 = mutate by up to this fraction of each field's range. */
@@ -132,6 +197,8 @@ export interface SequencerSettings {
   length: number;
   /** Global multiplier on every step's chance. */
   density: number;
+  /** Above 0.5, 'fill' steps play and '!fill' steps rest. */
+  fill?: number;
   /** Max random pitch offset, in semitones. */
   pitchRandom: number;
   /** Chance that a note jumps an octave up or down. */
@@ -147,6 +214,9 @@ export interface SequencerSettings {
  */
 export class SequencerCore {
   position = -1;
+  /** Completed passes through the pattern since the last reset, for trig conditions. */
+  loop = 0;
+  private prevPlayed = false;
   /** Recent (time, step) pairs, so the UI can show what's sounding now rather than what's scheduled. */
   private history: { time: number; step: number }[] = [];
   private lastClock: number | null = null;
@@ -160,6 +230,8 @@ export class SequencerCore {
 
   reset(): void {
     this.position = -1;
+    this.loop = 0;
+    this.prevPlayed = false;
   }
 
   /** Advance one step on a clock pulse and return the notes to play. */
@@ -169,12 +241,18 @@ export class SequencerCore {
     this.lastClock = time;
 
     const len = Math.max(1, Math.min(MAX_STEPS, Math.round(this.settings.length)));
-    this.position = (this.position + 1) % len;
+    const next = this.position + 1;
+    if (next >= len && this.position >= 0) this.loop++;
+    this.position = next % len;
     this.history.push({ time, step: this.position });
     if (this.history.length > 16) this.history.shift();
     const step = this.data.steps[this.position];
     if (!step?.on) return [];
-    if (this.random() >= step.chance * this.settings.density) return [];
+    const fill = (this.settings.fill ?? 0) > 0.5;
+    const plays =
+      conditionPasses(step.cond, this.loop, this.prevPlayed, fill) && this.random() < step.chance * this.settings.density;
+    this.prevPlayed = plays;
+    if (!plays) return [];
 
     const note = this.pickNote(step.note);
     const slice = this.interval / step.ratchet;
@@ -186,6 +264,7 @@ export class SequencerCore {
         length: Math.max(0.005, slice * step.length),
         note,
         index: step.send || undefined,
+        params: Object.keys(step.plocks).length ? step.plocks : undefined,
       });
     }
     return events;
@@ -231,6 +310,7 @@ export const sequencer: ModuleType = {
       { id: 'scale', label: 'Scale', min: 0, max: SCALES.length - 1, default: 1, step: 1, options: SCALES.map((s) => s.name) },
       { id: 'root', label: 'Root', min: 0, max: 11, default: 0, step: 1, options: NOTE_NAMES },
       { id: 'transpose', label: 'Transpose', min: -24, max: 24, default: 0, step: 1, unit: 'st' },
+      { id: 'fill', label: 'Fill', min: 0, max: 1, default: 0, step: 1, options: ['Off', 'On'] },
     ],
     face: ['density', 'pitchRandom'],
     data: sequencerData as ModuleDataDef,

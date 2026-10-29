@@ -919,6 +919,136 @@ input[type='range'] {
   color: var(--accent);
 }
 
+/* ---- tracker ---- */
+
+.step-grid[hidden],
+.tracker[hidden] {
+  display: none;
+}
+
+.steps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tracker {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trk-row {
+  display: grid;
+  grid-template-columns: 1.8em 1.7fr 1fr 1fr 1fr 1.7fr 1fr 0.8fr;
+  max-width: 560px;
+  gap: 2px;
+  align-items: stretch;
+}
+
+.trk-row:nth-child(4n + 1) .trk-num {
+  color: var(--accent);
+}
+
+.trk-head {
+  color: var(--muted);
+  font-size: 11px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+}
+
+.trk-head .trk-cell,
+.trk-head .trk-num {
+  align-self: end;
+  text-align: center;
+}
+
+.trk-num {
+  color: var(--muted);
+  align-self: center;
+  font-size: 11px;
+}
+
+.trk-cell {
+  min-height: 30px;
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.trk-row.off .trk-cell {
+  color: var(--muted);
+}
+
+.trk-row.playing {
+  background: rgb(255 138 61 / 0.12);
+}
+
+.trk-cell.cursor {
+  border-color: var(--accent);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.trk-bar {
+  position: sticky;
+  bottom: -24px;
+  display: grid;
+  grid-template-columns: 1fr repeat(4, 2.6em) auto;
+  align-items: center;
+  gap: 4px;
+  margin: 6px -14px 0;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  z-index: 1;
+}
+
+.trk-bar button {
+  min-height: 40px;
+  padding: 4px;
+}
+
+.trk-value {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plocks h4 {
+  margin: 6px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.plock {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.plock .param {
+  grid-template-columns: 5.5em 1fr 3.8em;
+}
+
+.plock.missing span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.plock-add {
+  width: 100%;
+  margin-top: 4px;
+}
+
 /* ---- palette ---- */
 
 .palette li button {
