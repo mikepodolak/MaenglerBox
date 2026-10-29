@@ -61,6 +61,19 @@ Ports carry three kinds of signal: **audio**, **cv** (modulation) and **gate** (
 
 Audio and CV can be patched into each other; gates only connect to gates.
 
+## Generative modules
+
+The module menu is grouped into Sequencing, Generative, Sound, Modulation and Utility.
+
+- **Chance Gate**: each incoming gate or note goes out A with the set chance, otherwise out B.
+- **Probability**: each trigger picks one of four outs by weight. Its Notes out carries the pick as a preset number, so a single FM Voice can act as a random kit.
+- **Markov Chain**: a grid of transition weights of up to 16×16. Each row is a state (a note), and its cells set where the chain can go next. Tap a cell to cycle its weight. Each state can repeat or rest.
+- **Bouncing Balls**: balls under gravity. Floor hits play notes picked by where the ball lands. Wall and ball-to-ball hits fire their own gates, and ball 1's position comes out as X/Y CV. A gate into Kick throws the balls back up.
+- **Game of Life**: Conway's rules on a 16×12 grid you draw. A scan line plays the live cells it crosses, with higher rows playing higher notes. Births and deaths fire gates, and the population is sent out as CV. A stuck grid reseeds itself.
+- **Euclidean**: spreads hits evenly over a loop. **Turing Machine**: a looping random melody that mutates by a chosen amount. **Sample & Hold**: random or drunk-walk values, sent out as CV and as notes.
+
+**Any output into any input.** As in VCV Rack, a gate patched into a CV input becomes a level that is high while the note plays. A CV or audio signal patched into a gate input fires a gate each time it rises past 0.5, for example a bouncing ball's height clocking a Markov chain.
+
 ## Roadmap
 
 1. Foundation: app shell, offline support, audio engine, patch model, on-device saving.

@@ -4,7 +4,7 @@ import type { ModuleType } from './types';
 
 export const MAX_STEPS = 32;
 
-const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+export const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 
 export interface Step {
   on: boolean;
@@ -334,6 +334,7 @@ export function noteName(n: number): string {
 export const sequencer: ModuleType = {
   def: {
     type: 'sequencer',
+    category: 'Sequencing',
     label: 'Chance Sequencer',
     description: 'Step sequencer with per-step chance, ratchets, and pitch randomness locked to a scale.',
     inputs: [

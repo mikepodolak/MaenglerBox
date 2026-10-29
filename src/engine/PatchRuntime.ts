@@ -1,5 +1,6 @@
 import type { EngineEnv, InputTarget, ModuleType, OutputSource, RuntimeModule } from '../modules/types';
 import type { Cable, ModuleInstance, Patch, Preset, PresetLibrary } from '../patch/types';
+import { gateToSignal, signalToGate } from './convert';
 
 interface LiveModule {
   instance: ModuleInstance;
@@ -97,13 +98,25 @@ export class PatchRuntime {
     const src = this.modules.get(cable.from.module)?.runtime.outputs[cable.from.port];
     const dst = this.modules.get(cable.to.module)?.runtime.inputs[cable.to.port];
     if (!src || !dst) return null;
-    return connectPorts(src, dst);
+    return connectPorts(src, dst, this.env.ctx);
   }
 }
 
-export function connectPorts(src: OutputSource, dst: InputTarget): (() => void) | null {
+/**
+ * Wire an output to an input. Any output can feed any input, as in VCV Rack:
+ * a gate into a CV input becomes a level that's high while the note is, and a
+ * CV or audio signal into a gate input fires a gate each time it rises past 0.5.
+ */
+export function connectPorts(src: OutputSource, dst: InputTarget, ctx?: BaseAudioContext): (() => void) | null {
   if (src.kind === 'gate') {
-    return dst.kind === 'gate' ? src.out.connect(dst.handler) : null;
+    if (dst.kind === 'gate') return src.out.connect(dst.handler);
+    if (!ctx) return null;
+    const bridge = gateToSignal(ctx, src.out);
+    const undo = connectPorts({ kind: 'node', node: bridge.node }, dst);
+    return () => {
+      undo?.();
+      bridge.undo();
+    };
   }
   const outIndex = src.index ?? 0;
   if (dst.kind === 'node') {
@@ -115,7 +128,13 @@ export function connectPorts(src: OutputSource, dst: InputTarget): (() => void) 
     src.node.connect(dst.param, outIndex);
     return () => safeDisconnect(() => src.node.disconnect(dst.param, outIndex));
   }
-  return null;
+  if (!ctx) return null;
+  const bridge = signalToGate(ctx, dst.handler);
+  src.node.connect(bridge.node, outIndex);
+  return () => {
+    safeDisconnect(() => src.node.disconnect(bridge.node, outIndex));
+    bridge.undo();
+  };
 }
 
 /** A module disposed earlier may already have dropped its connections. */

@@ -5,6 +5,7 @@ import { smoothSet, type ModuleType } from './types';
 export const output: ModuleType = {
   def: {
     type: 'output',
+    category: 'Utility',
     label: 'Output',
     inputs: [
       { id: 'left', label: 'L', kind: 'audio' },
@@ -41,6 +42,7 @@ const WAVES: OscillatorType[] = ['sine', 'triangle', 'sawtooth', 'square'];
 export const oscillator: ModuleType = {
   def: {
     type: 'oscillator',
+    category: 'Sound',
     presets: true,
     label: 'Oscillator',
     inputs: [{ id: 'fm', label: 'FM', kind: 'cv' }],
@@ -80,6 +82,7 @@ export const oscillator: ModuleType = {
 export const vca: ModuleType = {
   def: {
     type: 'vca',
+    category: 'Utility',
     label: 'VCA',
     inputs: [
       { id: 'in', label: 'In', kind: 'audio' },
@@ -134,6 +137,7 @@ export function envelopeStages(p: Record<string, number>, gateLength: number): E
 export const envelope: ModuleType = {
   def: {
     type: 'envelope',
+    category: 'Modulation',
     label: 'Envelope',
     description: 'ADSR or ADR envelope, fired by gates. Patch it into a VCA or any CV input.',
     presets: true,
@@ -197,6 +201,7 @@ export function clockTicks(next: number, from: number, to: number, interval: num
 export const clock: ModuleType = {
   def: {
     type: 'clock',
+    category: 'Sequencing',
     label: 'Clock',
     inputs: [],
     outputs: [{ id: 'out', label: 'Out', kind: 'gate' }],

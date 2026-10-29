@@ -1,6 +1,10 @@
 import type { ModuleDef } from '../patch/types';
 import { clock, envelope, oscillator, output, vca } from './core';
+import { balls } from './balls';
 import { fmVoice } from './fmVoice';
+import { chanceGate, euclid, probability, sampleHold, turing } from './generative';
+import { life } from './life';
+import { markov } from './markov';
 import { multiTracker } from './multiTracker';
 import { sequencer } from './sequencer';
 import type { ModuleType } from './types';
@@ -11,7 +15,13 @@ export function register(t: ModuleType): void {
   types.set(t.def.type, t);
 }
 
-for (const t of [clock, sequencer, multiTracker, fmVoice, oscillator, envelope, vca, output]) register(t);
+for (const t of [
+  clock, sequencer, multiTracker, euclid, turing,
+  chanceGate, probability, markov, balls, life,
+  fmVoice, oscillator,
+  envelope, sampleHold,
+  vca, output,
+]) register(t);
 
 /** Every worklet script any module needs, loaded once when audio starts. */
 export function allWorklets(): string[] {
