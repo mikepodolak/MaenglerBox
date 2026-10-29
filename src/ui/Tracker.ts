@@ -155,3 +155,116 @@ export class Tracker {
     this.onEdit(this.row, { on: !this.data.steps[this.row].on }, 'trk:on');
   }
 }
+
+/**
+ * All of a multi-track Tracker's tracks side by side, one column per track,
+ * like the M8's song view. Tap a cell to put the cursor on it (and edit that
+ * step below); the bar nudges its note. Track headers mute and unmute.
+ */
+export class TrackOverview {
+  readonly el = h('div', { class: 'tracker overview' });
+  private rows = h('div', { class: 'trk-rows', role: 'grid' });
+  private heads: HTMLButtonElement[] = [];
+  private cells: HTMLButtonElement[][] = [];
+  private track = 0;
+  private step = 0;
+  private playing = -1;
+  private data: { tracks: SequencerData[]; mutes: boolean[] } | null = null;
+  private barLabel = h('output', { class: 'trk-value' });
+
+  constructor(
+    private readonly trackCount: number,
+    private readonly onSelect: (track: number, step: number) => void,
+    private readonly onEdit: (track: number, step: number, change: Partial<Step>, coalesce: string) => void,
+    private readonly onMute: (track: number) => void,
+  ) {
+    const head = h('div', { class: 'trk-row trk-head', role: 'row' }, h('span', { class: 'trk-num' }, '#'));
+    for (let t = 0; t < trackCount; t++) {
+      const b = h('button', { class: 'trk-cell trk-track', 'aria-pressed': 'false', title: `Track ${t + 1}: tap to mute` }, String(t + 1));
+      b.addEventListener('click', () => this.onMute(t));
+      this.heads.push(b);
+      head.append(b);
+    }
+    head.style.setProperty('--tracks', String(trackCount));
+    const bar = h('div', { class: 'trk-bar' }, this.barLabel);
+    for (const [label, dir, big] of [['−−', -1, true], ['−', -1, false], ['+', 1, false], ['++', 1, true]] as const) {
+      bar.append(h('button', { 'aria-label': `Note ${dir > 0 ? 'up' : 'down'}${big ? ' an octave' : ''}`, onclick: () => this.nudge(dir, big) }, label));
+    }
+    bar.append(h('button', { class: 'trk-toggle', onclick: () => this.toggle() }, 'On/Off'));
+    this.el.append(head, this.rows, bar);
+  }
+
+  update(data: { tracks: SequencerData[]; mutes: boolean[] }, len: number, track: number, step: number): void {
+    this.data = data;
+    this.track = track;
+    this.step = step;
+    while (this.cells.length < len) this.addRow(this.cells.length);
+    while (this.cells.length > len) {
+      this.cells.pop();
+      this.rows.lastElementChild?.remove();
+    }
+    this.paint();
+  }
+
+  tick(step: number): void {
+    if (step === this.playing) return;
+    this.cells[this.playing]?.[0]?.parentElement?.classList.remove('playing');
+    this.cells[step]?.[0]?.parentElement?.classList.add('playing');
+    this.playing = step;
+  }
+
+  private addRow(i: number): void {
+    const row = h('div', { class: 'trk-row', role: 'row' }, h('span', { class: 'trk-num' }, String(i + 1).padStart(2, '0')));
+    row.style.setProperty('--tracks', String(this.trackCount));
+    const cells: HTMLButtonElement[] = [];
+    for (let t = 0; t < this.trackCount; t++) {
+      const b = h('button', { class: 'trk-cell', role: 'gridcell' });
+      b.addEventListener('click', () => {
+        if (this.track === t && this.step === i) this.toggle();
+        this.track = t;
+        this.step = i;
+        this.onSelect(t, i);
+        this.paint();
+      });
+      cells.push(b);
+      row.append(b);
+    }
+    this.cells.push(cells);
+    this.rows.append(row);
+  }
+
+  private paint(): void {
+    const d = this.data;
+    if (!d) return;
+    this.heads.forEach((b, t) => {
+      b.setAttribute('aria-pressed', String(d.mutes[t]));
+      b.classList.toggle('muted', d.mutes[t]);
+      b.classList.toggle('current', t === this.track);
+    });
+    this.cells.forEach((cells, i) =>
+      cells.forEach((b, t) => {
+        const s = d.tracks[t].steps[i];
+        b.textContent = s.on ? noteName(s.note) : '---';
+        b.classList.toggle('off', !s.on);
+        b.classList.toggle('muted', d.mutes[t]);
+        b.classList.toggle('has-cond', s.on && !!s.cond);
+        b.classList.toggle('has-locks', s.on && Object.keys(s.plocks).length > 0);
+        b.classList.toggle('cursor', i === this.step && t === this.track);
+      }),
+    );
+    const s = d.tracks[this.track].steps[this.step];
+    this.barLabel.textContent = `T${this.track + 1} ${String(this.step + 1).padStart(2, '0')} ${s.on ? noteName(s.note) : '---'}`;
+  }
+
+  private nudge(dir: number, big: boolean): void {
+    const s = this.data?.tracks[this.track].steps[this.step];
+    if (!s) return;
+    const note = s.on ? clamp(s.note + dir * (big ? 12 : 1), 0, 127) : s.note;
+    this.onEdit(this.track, this.step, { on: true, note }, 'ovw:note');
+  }
+
+  private toggle(): void {
+    const s = this.data?.tracks[this.track].steps[this.step];
+    if (s) this.onEdit(this.track, this.step, { on: !s.on }, 'ovw:on');
+  }
+}
