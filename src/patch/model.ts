@@ -41,6 +41,15 @@ export function moveModule(patch: Patch, moduleId: string, x: number, y: number)
   return touch(patch, { modules: patch.modules.map((m) => (m.id === moduleId ? { ...m, x, y } : m)) });
 }
 
+/** Card widths a resizable module can take. */
+export const MIN_CARD_WIDTH = 160;
+export const MAX_CARD_WIDTH = 640;
+
+export function resizeModule(patch: Patch, moduleId: string, width: number): Patch {
+  const w = Math.round(Math.min(MAX_CARD_WIDTH, Math.max(MIN_CARD_WIDTH, width)));
+  return touch(patch, { modules: patch.modules.map((m) => (m.id === moduleId ? { ...m, width: w } : m)) });
+}
+
 export function setParam(patch: Patch, defs: DefLookup, moduleId: string, paramId: string, value: number): Patch {
   const mod = findModule(patch, moduleId);
   const param = defs(mod.type)?.params.find((p) => p.id === paramId);
@@ -129,6 +138,7 @@ export function deserializePatch(json: unknown, defs: DefLookup): Patch {
     if (def.data) mod.data = def.data.normalize(m.data);
     const presets = normalizePresets(m.presets, def.data?.normalize);
     if (presets) mod.presets = presets;
+    if (typeof m.width === 'number' && Number.isFinite(m.width)) mod.width = Math.min(MAX_CARD_WIDTH, Math.max(MIN_CARD_WIDTH, m.width));
     if (Array.isArray(m.locks)) mod.locks = m.locks.filter((id): id is string => typeof id === 'string' && id in params);
     modules.push(mod);
   }

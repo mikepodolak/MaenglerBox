@@ -1,6 +1,7 @@
 import type { AppStore } from '../app/store';
 import { getDef } from '../modules/registry';
-import { canConnect, connect, disconnect, moveModule, PatchError, setParam } from '../patch/model';
+import { canConnect, connect, disconnect, MAX_CARD_WIDTH, MIN_CARD_WIDTH, moveModule, PatchError, resizeModule, setParam } from '../patch/model';
+import { openHelp } from './help';
 import type { Cable, ModuleDef, ModuleInstance, Patch, PortKind, PortRef } from '../patch/types';
 import { paramControl, type ParamControl } from './controls';
 import { h } from './dom';
@@ -42,7 +43,10 @@ type Gesture =
   | { kind: 'pan'; startX: number; startY: number; view: View; moved: boolean; tapModule?: string }
   | { kind: 'pinch'; d0: number; zoom0: number; world: { x: number; y: number } }
   | { kind: 'module'; id: string; startX: number; startY: number; origX: number; origY: number; moved: boolean }
-  | { kind: 'cable'; from: JackInfo; path: SVGPathElement };
+  | { kind: 'cable'; from: JackInfo; path: SVGPathElement }
+  | { kind: 'resize'; id: string; startX: number; origW: number; moved: boolean }
+  /** Play mode: a tap on a visual module's drawing shows or hides its jacks and controls. */
+  | { kind: 'reveal'; id: string; startX: number; startY: number; moved: boolean };
 
 /**
  * The patching canvas. Modules are DOM cards on a pannable, zoomable world;
@@ -59,6 +63,8 @@ export class Canvas {
   private pointers = new Map<number, { x: number; y: number }>();
   private gesture: Gesture | null = null;
   private selectedCable: string | null = null;
+  /** Visual modules showing their jacks and controls in Play mode. */
+  private revealed = new Set<string>();
   private dropHint = h('div', { class: 'drop-hint', role: 'status' });
 
   constructor(private readonly store: AppStore) {
@@ -109,7 +115,7 @@ export class Canvas {
   static cardHeight(def: ModuleDef): number {
     const ports = Math.max(def.inputs.length, def.outputs.length) * 28;
     const face = (def.face ?? []).length * 30;
-    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 90 : ['sequencer', 'euclid', 'markov', 'turing', 'random'].includes(def.type) ? 24 : 0;
+    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' ? 190 : def.type === 'random' ? 60 : ['sequencer', 'markov', 'chance', 'sh'].includes(def.type) ? 40 : 0;
     return 60 + ports + face + drawing;
   }
 
@@ -190,6 +196,7 @@ export class Canvas {
         'header',
         { class: 'node-head' },
         h('span', { class: 'node-title' }, def.label),
+        h('button', { class: 'node-help', 'aria-label': `About ${def.label}`, title: 'How to use it' }, '?'),
         h('button', { class: 'node-open', 'aria-label': `${def.label} settings`, title: 'Settings' }, '⚙'),
       ),
       h(
@@ -200,7 +207,9 @@ export class Canvas {
       ),
       face?.el ?? null,
       controls.size ? h('div', { class: 'node-face' }, ...[...controls.values()].map((c) => c.el)) : null,
+      def.visual ? h('span', { class: 'node-resize', 'aria-label': 'Resize', title: 'Drag to resize' }) : null,
     );
+    if (def.visual) el.classList.add('visual');
     return { el, instance: m, controls, face };
   }
 
@@ -212,6 +221,12 @@ export class Canvas {
       card.el.style.top = `${m.y}px`;
     }
     card.el.classList.toggle('selected', this.store.selected === m.id);
+    if (card.el.classList.contains('visual')) {
+      const resizing = this.gesture?.kind === 'resize' && this.gesture.id === m.id;
+      if (!resizing) card.el.style.width = `${m.width ?? 200}px`;
+      // Play mode shows just the drawing until it's tapped.
+      card.el.classList.toggle('collapsed', this.store.prefs.mode === 'play' && !this.revealed.has(m.id));
+    }
     for (const [id, c] of card.controls) c.set(m.params[id]);
     card.face?.update(m);
   }
@@ -233,6 +248,14 @@ export class Canvas {
     return this.toWorld(r.left + r.width / 2, r.top + r.height / 2);
   }
 
+  /** Where a cable meets a jack, or the card's edge when the jack is hidden (a collapsed visual module). */
+  private anchor(jack: HTMLElement, side: 'in' | 'out'): Point {
+    if (jack.offsetParent !== null) return this.jackPos(jack);
+    const card = jack.closest<HTMLElement>('.node')!;
+    const r = card.getBoundingClientRect();
+    return this.toWorld(side === 'out' ? r.right : r.left, r.top + r.height / 2);
+  }
+
   private drawCables(): void {
     const patch = this.store.patch;
     const frag = document.createDocumentFragment();
@@ -240,8 +263,8 @@ export class Canvas {
       const a = this.jackEl(c.from, 'out');
       const b = this.jackEl(c.to, 'in');
       if (!a || !b) continue;
-      const p1 = this.jackPos(a);
-      const p2 = this.jackPos(b);
+      const p1 = this.anchor(a, 'out');
+      const p2 = this.anchor(b, 'in');
       const { d, mid } = this.route(p1, p2);
       const kind = jackInfo(a)?.kind ?? 'audio';
       const selected = c.id === this.selectedCable;
@@ -274,6 +297,14 @@ export class Canvas {
 
     const play = this.store.prefs.mode === 'play';
 
+    const help = target.closest<HTMLElement>('.node-help');
+    if (help) {
+      const id = help.closest<HTMLElement>('.node')!.dataset.module!;
+      const m = this.store.patch.modules.find((x) => x.id === id);
+      if (m) openHelp(this.store, m.type);
+      return;
+    }
+
     // The settings button works in both modes.
     const open = target.closest<HTMLElement>('.node-open');
     if (open) {
@@ -285,6 +316,11 @@ export class Canvas {
     // Dragging a module pans instead, so a swipe never opens a panel by accident.
     if (play) {
       const node = target.closest<HTMLElement>('.node');
+      if (node?.classList.contains('visual') && target.closest('.face-visual')) {
+        this.el.setPointerCapture(e.pointerId);
+        this.gesture = { kind: 'reveal', id: node.dataset.module!, startX: e.clientX, startY: e.clientY, moved: false };
+        return;
+      }
       if (node && !target.closest('.node-head, .node-ports, .seq-strip')) return;
       this.startBackgroundGesture(e, node?.dataset.module);
       return;
@@ -310,6 +346,15 @@ export class Canvas {
     if (cable) {
       this.selectedCable = cable.getAttribute('data-cable');
       this.drawCables();
+      return;
+    }
+
+    const grip = target.closest<HTMLElement>('.node-resize');
+    if (grip) {
+      const id = grip.closest<HTMLElement>('.node')!.dataset.module!;
+      const m = this.store.patch.modules.find((x) => x.id === id)!;
+      this.el.setPointerCapture(e.pointerId);
+      this.gesture = { kind: 'resize', id, startX: e.clientX, origW: m.width ?? 200, moved: false };
       return;
     }
 
@@ -358,6 +403,13 @@ export class Canvas {
       const zoom = clamp(g.zoom0 * (dist(a, b) / g.d0), MIN_ZOOM, MAX_ZOOM);
       const mid = this.toLocal((a.x + b.x) / 2, (a.y + b.y) / 2);
       this.setView({ zoom, x: mid.x - g.world.x * zoom, y: mid.y - g.world.y * zoom });
+    } else if (g.kind === 'resize') {
+      const w = Math.min(MAX_CARD_WIDTH, Math.max(MIN_CARD_WIDTH, g.origW + (e.clientX - g.startX) / this.view.zoom));
+      g.moved = true;
+      this.cards.get(g.id)!.el.style.width = `${Math.round(w)}px`;
+      this.drawCables();
+    } else if (g.kind === 'reveal') {
+      if (Math.hypot(e.clientX - g.startX, e.clientY - g.startY) > TAP_SLOP) g.moved = true;
     } else if (g.kind === 'module') {
       const dx = (e.clientX - g.startX) / this.view.zoom;
       const dy = (e.clientY - g.startY) / this.view.zoom;
@@ -400,6 +452,13 @@ export class Canvas {
         this.drawCables();
       }
       this.saveView();
+    } else if (g.kind === 'resize') {
+      if (g.moved) this.store.update((p) => resizeModule(p, g.id, parseFloat(this.cards.get(g.id)!.el.style.width)));
+    } else if (g.kind === 'reveal') {
+      if (g.moved || cancelled) return;
+      if (this.revealed.has(g.id)) this.revealed.delete(g.id);
+      else this.revealed.add(g.id);
+      this.render();
     } else if (g.kind === 'module') {
       const card = this.cards.get(g.id)!;
       card.el.classList.remove('dragging');

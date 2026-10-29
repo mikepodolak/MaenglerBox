@@ -172,7 +172,34 @@ dialog.sheet {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   width: min(420px, calc(100vw - 32px));
-  padding: 16px;
+  max-height: min(85vh, 900px);
+  overflow: auto;
+  padding: 0 16px 16px;
+}
+
+/* Title stays put while a long sheet scrolls, so × is always in reach. */
+.sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 10px 8px 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+dialog.palette ul {
+  max-height: none;
+  overflow: visible;
 }
 
 dialog::backdrop {
@@ -1286,7 +1313,6 @@ input[type='range'] {
 .face-canvas {
   display: block;
   width: calc(100% - 24px);
-  height: auto;
   margin: 0 12px 8px;
   border-radius: 4px;
   background: var(--bg);
@@ -1393,4 +1419,289 @@ input[type='range'] {
 
 .life-grid .cell.on {
   background: var(--cv);
+}
+
+/* ---- Help buttons and sheet ---- */
+.node-help {
+  min-height: 36px;
+  min-width: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.node-title {
+  flex: 1;
+}
+
+.help-btn {
+  flex: none;
+  min-width: 36px;
+  font-weight: 700;
+}
+
+dialog.palette li {
+  align-items: stretch;
+}
+
+dialog.help {
+  width: min(560px, calc(100vw - 24px));
+}
+
+.help-about {
+  line-height: 1.45;
+}
+
+.help-section h3 {
+  margin: 18px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.help-section dl {
+  display: grid;
+  grid-template-columns: minmax(70px, max-content) 1fr;
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.help-section dt {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.help-section dd {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.jack-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border: 2px solid var(--gate);
+  border-radius: 50%;
+}
+
+.jack-dot.cv {
+  border-color: var(--cv);
+}
+
+.jack-dot.audio {
+  border-color: var(--audio);
+}
+
+.help-idea {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.help-idea p {
+  margin: 4px 0 8px;
+  line-height: 1.4;
+}
+
+.help-recipe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.help-recipe code {
+  white-space: pre-wrap;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.help-cables summary {
+  margin-top: 16px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* ---- Probability bars and Chance lamps ---- */
+.prob-bars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  height: 52px;
+  padding: 0 12px 8px;
+  align-items: end;
+}
+
+.prob-bars span {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.prob-bars i {
+  display: block;
+  height: calc(6px + var(--h, 0) * 30px);
+  border-radius: 3px;
+  background: #3d4047;
+  transition: background 0.08s;
+}
+
+.prob-bars b {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.prob-bars span.lit i {
+  background: var(--accent);
+}
+
+.prob-bars span.lit b {
+  color: var(--text);
+}
+
+.chance-lamps {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 0 12px 10px;
+}
+
+.chance-lamps span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #3d4047;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chance-lamps span.lit {
+  background: var(--gate);
+  color: var(--bg);
+}
+
+/* ---- Visual modules: resizable, and drawing-only in Play mode ---- */
+.node.visual {
+  min-width: 160px;
+}
+
+.node-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  height: 28px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(135deg, transparent 55%, var(--muted) 55%, var(--muted) 62%, transparent 62%, transparent 72%, var(--muted) 72%, var(--muted) 79%, transparent 79%);
+  border-bottom-right-radius: var(--radius);
+}
+
+.canvas[data-mode='play'] .node-resize {
+  display: none;
+}
+
+.node.visual.collapsed {
+  padding: 6px 0 0;
+}
+
+.node.visual.collapsed > :not(.face-visual) {
+  display: none;
+}
+
+.node.visual.collapsed .face-canvas {
+  margin: 0 6px 6px;
+  width: calc(100% - 12px);
+}
+
+.node.visual.collapsed .pad-grid {
+  padding: 0 6px 6px;
+}
+
+.canvas[data-mode='play'] .node.visual .face-visual {
+  cursor: pointer;
+}
+
+/* ---- Patches sheet, name field, recorder ---- */
+.patch-name {
+  border-bottom: 1px dashed var(--line);
+}
+
+.patch-row .open-patch {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.patch-row .icon {
+  flex: none;
+  min-width: 40px;
+}
+
+.rec-btn.on {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--bg);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-player {
+  width: 100%;
+  margin: 8px 0 12px;
+}
+
+a.button {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+}
+
+/* Turing Machine: a lit pad grid, one column per loop step. */
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 8), minmax(0, 1fr));
+  gap: 3px;
+  padding: 0 12px 10px;
+}
+
+.pad-grid span {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: #2c2f35;
+}
+
+.pad-grid span.now {
+  background: #3a3e45;
+}
+
+.pad-grid span.lit {
+  background: hsl(var(--hue) 75% 45%);
+}
+
+.pad-grid span.lit.now {
+  background: hsl(var(--hue) 90% 62%);
+  box-shadow: 0 0 8px hsl(var(--hue) 90% 60%);
 }

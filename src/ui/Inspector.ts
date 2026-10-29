@@ -25,6 +25,7 @@ import type { ModuleDef, ModuleInstance, ParamDef, Patch, Preset } from '../patc
 import { paramControl, type ParamControl } from './controls';
 import { h } from './dom';
 import { createEditor, type DataEditor } from './editors';
+import { openHelp } from './help';
 import { TrackOverview, Tracker } from './Tracker';
 import { TRACKS, trackPort, type MultiTrackerData } from '../modules/multiTracker';
 
@@ -123,6 +124,7 @@ export class Inspector {
         'header',
         { class: 'inspector-head' },
         h('h2', {}, def.label),
+        h('button', { class: 'icon help-btn', 'aria-label': `About ${def.label}`, title: 'How to use it', onclick: () => openHelp(this.store, m.type) }, '?'),
         h('button', {
           class: 'danger',
           onclick: () => this.store.update((p) => removeModule(p, m.id)),

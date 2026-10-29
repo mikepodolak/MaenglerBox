@@ -5,7 +5,9 @@ import { addModule } from '../patch/model';
 import { MODULE_CATEGORIES } from '../patch/types';
 import { Canvas } from './Canvas';
 import { h } from './dom';
+import { openHelp, setHelpPlacer } from './help';
 import { Inspector } from './Inspector';
+import { openSheet } from './sheet';
 
 export class App {
   private canvas: Canvas;
@@ -21,6 +23,7 @@ export class App {
     play: h('button', { 'aria-pressed': 'false', title: 'Layout locked; tap a module to open its settings' }, 'Play'),
   };
   private cableBtn = h('button', { class: 'icon-btn', title: 'Cable style' });
+  private recBtn = h('button', { class: 'rec-btn', title: 'Record the audio output' });
 
   constructor(
     private readonly root: HTMLElement,
@@ -29,6 +32,7 @@ export class App {
   ) {
     this.canvas = new Canvas(store);
     this.inspector = new Inspector(store);
+    setHelpPlacer(() => this.canvas.freeSpot(440, 600));
   }
 
   mount(): void {
@@ -45,6 +49,7 @@ export class App {
     this.cableBtn.addEventListener('click', () =>
       this.store.setPref('cableStyle', this.store.prefs.cableStyle === 'curved' ? 'square' : 'curved'),
     );
+    this.recBtn.addEventListener('click', () => void this.toggleRecording());
     this.undoBtn.addEventListener('click', () => this.store.undo());
     this.redoBtn.addEventListener('click', () => this.store.redo());
     window.addEventListener('keydown', (e) => {
@@ -78,6 +83,7 @@ export class App {
       h('button', { class: 'add-btn', onclick: () => this.openPalette() }, '+ Module'),
       h('button', { onclick: () => this.canvas.fit() }, 'Fit'),
       h('button', { onclick: () => void this.openPatches() }, 'Patches'),
+      this.recBtn,
       this.audioBtn,
     );
 
@@ -104,8 +110,17 @@ export class App {
     this.cableBtn.textContent = square ? '⌐' : '∿';
     this.cableBtn.setAttribute('aria-label', square ? 'Cables: right-angle. Tap for curved' : 'Cables: curved. Tap for right-angle');
     this.cableBtn.title = this.cableBtn.getAttribute('aria-label')!;
+    this.paintRec();
     this.canvas.render();
     this.inspector.render();
+  }
+
+  private paintRec(): void {
+    const on = this.engine.recording;
+    const t = Math.floor(this.engine.recordedSeconds());
+    this.recBtn.textContent = on ? `■ ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` : '● Rec';
+    this.recBtn.classList.toggle('on', on);
+    this.recBtn.setAttribute('aria-label', on ? 'Stop recording' : 'Record the audio output');
   }
 
   /** Drives playheads and other live displays. */
@@ -116,6 +131,7 @@ export class App {
         this.canvas.tick(state);
         this.inspector.tick(state);
       }
+      if (this.engine.recording) this.paintRec();
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
@@ -129,13 +145,9 @@ export class App {
   }
 
   private openPalette(): void {
-    const dialog = h('dialog', { class: 'sheet palette' });
-    const close = () => {
-      dialog.close();
-      dialog.remove();
-    };
-    dialog.append(
-      h('h2', {}, 'Add a module'),
+    const sheet = openSheet(
+      'Add a module',
+      'palette',
       // Grouped by category, so a growing module list stays easy to scan.
       ...MODULE_CATEGORIES.flatMap((cat) => {
         const defs = allDefs().filter((d) => (d.category ?? 'Utility') === cat);
@@ -162,60 +174,112 @@ export class App {
                         return next;
                       });
                       this.store.select(added);
-                      close();
+                      sheet.close();
                     },
                   },
                   h('strong', {}, d.label),
                   d.description ? h('span', {}, d.description) : null,
                 ),
+                h('button', { class: 'icon help-btn', 'aria-label': `About ${d.label}`, onclick: () => openHelp(this.store, d.type) }, '?'),
               ),
             ),
           ),
         ];
       }),
-      h('div', { class: 'dialog-actions' }, h('button', { onclick: close }, 'Cancel')),
     );
-    dialog.addEventListener('cancel', close);
-    document.body.append(dialog);
-    dialog.showModal();
   }
 
   private async openPatches(): Promise<void> {
-    const list = await this.store.storage.list();
-    const dialog = h('dialog', { class: 'sheet patches' });
-    const close = () => {
-      dialog.close();
-      dialog.remove();
-    };
-    dialog.append(
-      h('h2', {}, 'Patches'),
-      h(
-        'ul',
-        {},
-        ...list.map((s) =>
-          h(
-            'li',
-            {},
-            h('button', {
-              class: s.id === this.store.patch.id ? 'current' : undefined,
-              onclick: () => {
-                void this.store.open(s.id);
-                close();
-              },
-            }, s.name),
-            h('time', {}, new Date(s.updatedAt).toLocaleString()),
-          ),
-        ),
-      ),
+    const list = h('ul', {});
+    const sheet = openSheet(
+      'Patches',
+      'patches',
+      list,
       h(
         'div',
         { class: 'dialog-actions' },
-        h('button', { onclick: () => { this.store.newPatch(); close(); } }, 'New patch'),
-        h('button', { onclick: close }, 'Close'),
+        h('button', { onclick: () => { this.store.newPatch(); sheet.close(); } }, 'New patch'),
       ),
     );
-    dialog.addEventListener('cancel', close);
-    document.body.append(dialog);
-    dialog.showModal();
+    const fill = async () => {
+      const rows = await this.store.storage.list();
+      list.replaceChildren(
+        ...rows.map((s) =>
+          h(
+            'li',
+            { class: 'patch-row' },
+            h(
+              'button',
+              {
+                class: s.id === this.store.patch.id ? 'open-patch current' : 'open-patch',
+                onclick: () => {
+                  void this.store.open(s.id);
+                  sheet.close();
+                },
+              },
+              h('strong', {}, s.name),
+              h('time', {}, new Date(s.updatedAt).toLocaleString()),
+            ),
+            h('button', {
+              class: 'icon',
+              'aria-label': `Rename ${s.name}`,
+              title: 'Rename',
+              onclick: async () => {
+                const name = prompt('Patch name', s.name);
+                if (name === null) return;
+                await this.store.renamePatch(s.id, name);
+                await fill();
+              },
+            }, '✎'),
+            h('button', {
+              class: 'icon danger',
+              'aria-label': `Delete ${s.name}`,
+              title: 'Delete',
+              onclick: async () => {
+                if (!confirm(`Delete "${s.name}"? This can't be undone.`)) return;
+                await this.store.deletePatch(s.id);
+                await fill();
+              },
+            }, '🗑'),
+          ),
+        ),
+      );
+    };
+    await fill();
+  }
+
+  private async toggleRecording(): Promise<void> {
+    if (!this.engine.recording) {
+      if (this.engine.state !== 'running') await this.engine.start();
+      if (!this.engine.startRecording()) alert("This browser can't record audio.");
+      this.render();
+      return;
+    }
+    const blob = await this.engine.stopRecording();
+    this.render();
+    if (blob) this.showRecording(blob);
+  }
+
+  private showRecording(blob: Blob): void {
+    const url = URL.createObjectURL(blob);
+    const ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '.');
+    const filename = `${this.store.patch.name} ${stamp}.${ext}`;
+    const file = new File([blob], filename, { type: blob.type });
+    const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+    const canShare = !!nav.share && !!nav.canShare?.({ files: [file] });
+    const sheet = openSheet(
+      'Recording',
+      'recording',
+      h('p', { class: 'hint' }, filename),
+      h('audio', { controls: true, src: url, class: 'rec-player' }),
+      h(
+        'div',
+        { class: 'dialog-actions' },
+        canShare ? h('button', { onclick: () => void nav.share({ files: [file], title: filename }).catch(() => {}) }, 'Share / Save to Files') : null,
+        h('a', { class: 'button', href: url, download: filename }, 'Download'),
+      ),
+    );
+    sheet.dialog.addEventListener('close', () => setTimeout(() => URL.revokeObjectURL(url), 60_000));
   }
 }

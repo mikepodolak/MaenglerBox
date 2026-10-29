@@ -49,9 +49,10 @@ export class PatchStore {
     });
   }
 
-  async save(patch: Patch): Promise<void> {
+  /** Store a patch. `remember` marks it as the one to reopen on the next launch. */
+  async save(patch: Patch, remember = true): Promise<void> {
     await this.run('readwrite', (s) => s.put(patch));
-    rememberLast(patch.id);
+    if (remember) rememberLast(patch.id);
   }
 
   async load(id: string): Promise<unknown | undefined> {

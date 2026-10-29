@@ -1,4 +1,6 @@
 import { GateOutput, type GateEvent } from '../engine/gate';
+import type { ParamDef } from '../patch/types';
+import { noteName } from './sequencer';
 import { cvSource, PITCH_PARAMS, unitToNote } from './util';
 import type { ModuleType } from './types';
 
@@ -130,61 +132,144 @@ export function euclidHit(i: number, hits: number, steps: number, rotate = 0): b
   return (j * hits) % steps < hits;
 }
 
+export const EUCLID_RINGS = 4;
+export const EUCLID_COLORS = ['#ff5f57', '#f5c542', '#3ecf6e', '#4fb3ff'];
+export const EUCLID_SPEEDS = ['÷4', '÷3', '÷2', '×1', '×2'];
+const NOTE_MIN = 24;
+const NOTE_MAX = 96;
+
+/** Param id for ring r's setting (0-based ring). Ring 1 keeps the plain ids from the one-ring version. */
+export const ringParam = (name: string, r: number) => (r === 0 ? name : `${name}${r + 1}`);
+
+const RING_DEFAULTS = [
+  { steps: 16, hits: 5, rotate: 0, note: 36 },
+  { steps: 12, hits: 4, rotate: 1, note: 48 },
+  { steps: 9, hits: 2, rotate: 0, note: 55 },
+  { steps: 7, hits: 3, rotate: 2, note: 60 },
+];
+
+function ringParams(r: number): ParamDef[] {
+  const d = RING_DEFAULTS[r];
+  const id = (n: string) => ringParam(n, r);
+  return [
+    { id: id('on'), label: 'Ring', min: 0, max: 1, default: r < 2 ? 1 : 0, step: 1, options: ['Off', 'On'] },
+    { id: id('steps'), label: 'Steps', min: 1, max: 32, default: d.steps, step: 1 },
+    { id: id('hits'), label: 'Hits', min: 0, max: 32, default: d.hits, step: 1 },
+    { id: id('rotate'), label: 'Rotate', min: 0, max: 31, default: d.rotate, step: 1 },
+    { id: id('speed'), label: 'Speed', min: 0, max: EUCLID_SPEEDS.length - 1, default: 3, step: 1, options: EUCLID_SPEEDS },
+    { id: id('note'), label: 'Note', min: NOTE_MIN, max: NOTE_MAX, default: d.note, step: 1, options: Array.from({ length: NOTE_MAX - NOTE_MIN + 1 }, (_, i) => noteName(NOTE_MIN + i)) },
+  ];
+}
+
+/** Ring r's live settings, rounded. */
+export function ringSettings(p: Record<string, number>, r: number) {
+  const g = (n: string) => Math.round(p[ringParam(n, r)] ?? 0);
+  return { on: r === 0 || g('on') === 1, steps: Math.max(1, g('steps')), hits: g('hits'), rotate: g('rotate'), speed: g('speed'), note: g('note') };
+}
+
+/**
+ * Four Euclidean rhythms on one clock, drawn as concentric rings like the Max
+ * and Reaktor Euclidean sequencers. Each ring spreads its hits evenly over its
+ * own loop, at its own speed, so rings of different lengths make polymeters.
+ */
 export const euclid: ModuleType = {
   def: {
     type: 'euclid',
     label: 'Euclidean',
     category: 'Sequencing',
-    description: 'Spreads a number of hits evenly over a loop of steps. Rests go out the Off jack.',
+    description: 'Four rings of evenly spread hits, each its own length and speed. Each ring has an output; Notes plays them all with their own pitches.',
+    visual: true,
     inputs: [
       { id: 'clock', label: 'Clock', kind: 'gate' },
       { id: 'reset', label: 'Reset', kind: 'gate' },
     ],
     outputs: [
-      { id: 'out', label: 'Hits', kind: 'gate' },
-      { id: 'off', label: 'Off', kind: 'gate' },
+      { id: 'out', label: 'Ring 1', kind: 'gate' },
+      { id: 'out2', label: 'Ring 2', kind: 'gate' },
+      { id: 'out3', label: 'Ring 3', kind: 'gate' },
+      { id: 'out4', label: 'Ring 4', kind: 'gate' },
+      { id: 'notes', label: 'Notes', kind: 'gate' },
+      { id: 'off', label: 'Ring 1 off', kind: 'gate' },
     ],
     params: [
-      { id: 'steps', label: 'Steps', min: 1, max: 32, default: 16, step: 1 },
-      { id: 'hits', label: 'Hits', min: 0, max: 32, default: 5, step: 1 },
-      { id: 'rotate', label: 'Rotate', min: 0, max: 31, default: 0, step: 1 },
+      ...Array.from({ length: EUCLID_RINGS }, (_, r) => ringParams(r)).flat().filter((p) => p.id !== 'on'),
       { id: 'accent', label: 'Accent', min: 0, max: 1, default: 0.3, step: 0.01 },
     ],
-    face: ['hits', 'steps'],
+    face: [],
+    groups: Array.from({ length: EUCLID_RINGS }, (_, r) => ({
+      label: `Ring ${r + 1}`,
+      params: ringParams(r).map((p) => p.id).filter((id) => id !== 'on'),
+    })).concat([{ label: 'All rings', params: ['accent'] }]),
     presetScope: 'patch',
     presets: true,
   },
   create(_env, params) {
     const p = { ...params };
-    const out = new GateOutput();
+    const outs = Array.from({ length: EUCLID_RINGS }, () => new GateOutput());
     const off = new GateOutput();
-    let pos = -1;
-    const history: { time: number; step: number }[] = [];
+    const notes = new GateOutput();
+    let ticks = -1;
+    const pos = Array(EUCLID_RINGS).fill(-1);
+    const history: { time: number; steps: number[] }[] = [];
+
+    const play = (r: number, time: number, length: number) => {
+      const s = ringSettings(p, r);
+      pos[r] = (pos[r] + 1) % s.steps;
+      const hit = euclidHit(pos[r], s.hits, s.steps, s.rotate);
+      if (!hit) {
+        if (r === 0) off.emit({ time, length, value: 1 });
+        return;
+      }
+      // The first hit of each loop is the downbeat; the rest are quieter by Accent.
+      const first = !Array.from({ length: pos[r] }, (_, k) => euclidHit(k, s.hits, s.steps, s.rotate)).some(Boolean);
+      const ev = { time, length, value: first ? 1 : 1 - p.accent };
+      outs[r].emit(ev);
+      notes.emit({ ...ev, note: s.note, index: r + 1 });
+    };
+
     return {
       inputs: {
         clock: {
           kind: 'gate',
           handler: (e) => {
-            const steps = Math.round(p.steps);
-            pos = (pos + 1) % steps;
-            const hit = euclidHit(pos, Math.round(p.hits), steps, Math.round(p.rotate));
-            // The first hit of the loop is the downbeat; the rest are quieter by Accent.
-            const first = hit && !Array.from({ length: pos }, (_, k) => euclidHit(k, Math.round(p.hits), steps, Math.round(p.rotate))).some(Boolean);
-            (hit ? out : off).emit({ time: e.time, length: e.length, value: first ? 1 : 1 - p.accent });
-            history.push({ time: e.time, step: pos });
+            ticks++;
+            for (let r = 0; r < EUCLID_RINGS; r++) {
+              const s = ringSettings(p, r);
+              if (!s.on) continue;
+              const sp = EUCLID_SPEEDS[s.speed] ?? '×1';
+              if (sp === '×2') {
+                // Twice per clock: on the tick and halfway to the next (a clock gate lasts half a step).
+                play(r, e.time, e.length / 2);
+                play(r, e.time + e.length, e.length / 2);
+              } else {
+                const div = sp === '×1' ? 1 : Number(sp.slice(1));
+                if (ticks % div === 0) play(r, e.time, e.length * div);
+              }
+            }
+            history.push({ time: e.time, steps: pos.slice() });
             if (history.length > 8) history.shift();
           },
         },
-        reset: { kind: 'gate', handler: () => (pos = -1) },
+        reset: {
+          kind: 'gate',
+          handler: () => {
+            ticks = -1;
+            pos.fill(-1);
+          },
+        },
       },
-      outputs: { out: { kind: 'gate', out }, off: { kind: 'gate', out: off } },
+      outputs: {
+        ...Object.fromEntries(outs.map((out, r) => [r === 0 ? 'out' : `out${r + 1}`, { kind: 'gate' as const, out }])),
+        off: { kind: 'gate', out: off },
+        notes: { kind: 'gate', out: notes },
+      },
       setParam(id, v) {
         p[id] = v;
       },
       getState(now) {
-        let step = -1;
-        for (const h of history) if (h.time <= now) step = h.step;
-        return { step };
+        let steps: number[] = pos.map(() => -1);
+        for (const h of history) if (h.time <= now) steps = h.steps;
+        return { steps, step: steps[0] };
       },
       dispose() {},
     };
@@ -207,6 +292,21 @@ export function turingStep(bits: boolean[], length: number, change: number, rand
   return [incoming, ...bits.slice(0, len - 1), ...bits.slice(len)];
 }
 
+/**
+ * The loop as it will play if nothing flips: the value for each step,
+ * arranged so column `pos` is the step playing now.
+ */
+export function turingLoop(bits: boolean[], length: number, pos: number): number[] {
+  const len = Math.max(1, Math.min(bits.length, Math.round(length)));
+  const head = bits.slice(0, len);
+  return Array.from({ length: len }, (_, c) => {
+    // k clocks from now the register has rotated k places.
+    const k = (((c - pos) % len) + len) % len;
+    const rotated = head.map((_, i) => head[(((i - k) % len) + len) % len]);
+    return turingValue(rotated.concat(bits.slice(len)));
+  });
+}
+
 /** The first eight bits as a number 0..1. */
 export function turingValue(bits: boolean[]): number {
   let v = 0;
@@ -218,6 +318,7 @@ export const turing: ModuleType = {
   def: {
     type: 'turing',
     label: 'Turing Machine',
+    visual: true,
     category: 'Sequencing',
     description: 'A looping random melody. Change at 0 locks the loop, at 1 it is always new, in between it slowly mutates.',
     inputs: [{ id: 'clock', label: 'Clock', kind: 'gate' }],
@@ -243,7 +344,8 @@ export const turing: ModuleType = {
     const gate = new GateOutput();
     const cv = cvSource(ctx);
     let bits = Array.from({ length: TURING_BITS }, () => Math.random() < 0.5);
-    const history: { time: number; bits: boolean[] }[] = [];
+    const history: { time: number; bits: boolean[]; pos: number }[] = [];
+    let pos = -1;
     return {
       inputs: {
         clock: {
@@ -256,7 +358,8 @@ export const turing: ModuleType = {
             // Density thins the notes using bits further down the register, so the rhythm loops too.
             const keep = turingValue(bits.slice(4).concat(bits.slice(0, 4))) < p.density;
             if (keep) notes.emit({ time: e.time, value: 0.6 + 0.4 * v, length: e.length, note: unitToNote(v, p.range, p) });
-            history.push({ time: e.time, bits });
+            pos = (pos + 1) % Math.round(p.length);
+            history.push({ time: e.time, bits, pos });
             if (history.length > 8) history.shift();
           },
         },
@@ -266,9 +369,9 @@ export const turing: ModuleType = {
         p[id] = v;
       },
       getState(now) {
-        let b: boolean[] = bits;
-        for (const h of history) if (h.time <= now) b = h.bits;
-        return { bits: b, length: Math.round(p.length) };
+        let h0 = { bits, pos };
+        for (const h of history) if (h.time <= now) h0 = h;
+        return { bits: h0.bits, pos: h0.pos, length: Math.round(p.length) };
       },
       dispose: cv.dispose,
     };
