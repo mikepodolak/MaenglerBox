@@ -59,9 +59,12 @@ export function setModuleData(patch: Patch, defs: DefLookup, moduleId: string, d
   return touch(patch, { modules: patch.modules.map((m) => (m.id === moduleId ? { ...m, data: clean } : m)) });
 }
 
-/** Which output kinds may feed which input kinds. Audio and CV are interchangeable signals. */
-export function canConnect(from: PortKind, to: PortKind): boolean {
-  if (from === 'gate' || to === 'gate') return from === to;
+/**
+ * Which output kinds may feed which input kinds. Like VCV Rack, any output can
+ * go into any input: the engine converts between gates and signals (a gate
+ * becomes a level; a rising signal fires a gate).
+ */
+export function canConnect(_from: PortKind, _to: PortKind): boolean {
   return true;
 }
 

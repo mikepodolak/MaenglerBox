@@ -1281,3 +1281,116 @@ input[type='range'] {
     min-width: 44px;
   }
 }
+
+/* Live drawings on generative modules' cards. */
+.face-canvas {
+  display: block;
+  width: calc(100% - 24px);
+  height: auto;
+  margin: 0 12px 8px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.palette-cat {
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---- Markov transition grid ---- */
+.markov-grid {
+  display: grid;
+  grid-template-columns: minmax(44px, auto) repeat(var(--n, 8), minmax(0, 1fr));
+  gap: 2px;
+  margin-top: 8px;
+  max-width: 560px;
+}
+
+.markov-grid .corner,
+.markov-grid .col-head {
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  align-self: end;
+}
+
+.markov-grid .corner {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.markov-grid [hidden] {
+  display: none;
+}
+
+.markov-grid .row-head {
+  min-height: 26px;
+  padding: 0 4px;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.markov-grid .row-head.selected {
+  border-color: var(--accent);
+}
+
+.markov-grid .row-head.playing {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.markov-grid .cell {
+  min-height: 26px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 3px;
+  background: var(--panel-2);
+}
+
+.markov-grid .cell.on {
+  background: rgb(255 138 61 / calc(0.25 + var(--w) * 0.75));
+}
+
+.markov-detail {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.markov-detail .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.markov-detail .param-label {
+  min-width: 44px;
+}
+
+/* ---- Game of Life drawing grid ---- */
+.life-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 16), minmax(0, 1fr));
+  gap: 2px;
+  max-width: 560px;
+  margin-top: 8px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.life-grid .cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: var(--panel-2);
+}
+
+.life-grid .cell.on {
+  background: var(--cv);
+}

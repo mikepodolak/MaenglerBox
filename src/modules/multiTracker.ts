@@ -43,6 +43,7 @@ export const trackPort = (t: number) => `out${t + 1}`;
 export const multiTracker: ModuleType = {
   def: {
     type: 'tracker',
+    category: 'Sequencing',
     label: 'Tracker',
     description: 'Eight step tracks on one clock, M8 style. Each track has its own Notes output.',
     inputs: [

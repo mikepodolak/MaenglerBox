@@ -105,6 +105,14 @@ export class Canvas {
   }
 
   /** A spot near the middle of the visible area that doesn't overlap an existing module. */
+  /** Rough height of a module's card before it exists, so a new module lands clear of the others. */
+  static cardHeight(def: ModuleDef): number {
+    const ports = Math.max(def.inputs.length, def.outputs.length) * 28;
+    const face = (def.face ?? []).length * 30;
+    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 90 : ['sequencer', 'euclid', 'markov', 'turing', 'random'].includes(def.type) ? 24 : 0;
+    return 60 + ports + face + drawing;
+  }
+
   freeSpot(width = 200, height = 220): { x: number; y: number } {
     const r = this.el.getBoundingClientRect();
     const c = this.toWorld(r.left + r.width / 2, r.top + r.height / 3);

@@ -2,6 +2,7 @@ import type { AppStore } from '../app/store';
 import type { AudioEngine, EngineState } from '../engine/AudioEngine';
 import { allDefs, getDef } from '../modules/registry';
 import { addModule } from '../patch/model';
+import { MODULE_CATEGORIES } from '../patch/types';
 import { Canvas } from './Canvas';
 import { h } from './dom';
 import { Inspector } from './Inspector';
@@ -135,35 +136,43 @@ export class App {
     };
     dialog.append(
       h('h2', {}, 'Add a module'),
-      h(
-        'ul',
-        {},
-        ...allDefs().map((d) =>
+      // Grouped by category, so a growing module list stays easy to scan.
+      ...MODULE_CATEGORIES.flatMap((cat) => {
+        const defs = allDefs().filter((d) => (d.category ?? 'Utility') === cat);
+        if (!defs.length) return [];
+        return [
+          h('h3', { class: 'palette-cat' }, cat),
           h(
-            'li',
+            'ul',
             {},
-            h(
-              'button',
-              {
-                onclick: () => {
-                  const def = getDef(d.type)!;
-                  const spot = this.canvas.freeSpot();
-                  let added = '';
-                  this.store.update((p) => {
-                    const [next, m] = addModule(p, def, spot.x, spot.y);
-                    added = m.id;
-                    return next;
-                  });
-                  this.store.select(added);
-                  close();
-                },
-              },
-              h('strong', {}, d.label),
-              d.description ? h('span', {}, d.description) : null,
+            ...defs.map((d) =>
+              h(
+                'li',
+                {},
+                h(
+                  'button',
+                  {
+                    onclick: () => {
+                      const def = getDef(d.type)!;
+                      const spot = this.canvas.freeSpot(200, Canvas.cardHeight(def));
+                      let added = '';
+                      this.store.update((p) => {
+                        const [next, m] = addModule(p, def, spot.x, spot.y);
+                        added = m.id;
+                        return next;
+                      });
+                      this.store.select(added);
+                      close();
+                    },
+                  },
+                  h('strong', {}, d.label),
+                  d.description ? h('span', {}, d.description) : null,
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        ];
+      }),
       h('div', { class: 'dialog-actions' }, h('button', { onclick: close }, 'Cancel')),
     );
     dialog.addEventListener('cancel', close);

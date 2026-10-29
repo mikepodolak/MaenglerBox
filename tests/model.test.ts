@@ -12,7 +12,7 @@ describe('patch model', () => {
     expect(m.params.freq).toBe(220);
   });
 
-  it('connects compatible ports and rejects gate to audio', () => {
+  it('connects any output to any input, including gate to audio', () => {
     let p = createPatch();
     let clock, osc, amp;
     [p, clock] = addModule(p, def('clock'));
@@ -20,7 +20,8 @@ describe('patch model', () => {
     [p, amp] = addModule(p, def('vca'));
     [p] = connect(p, getDef, { module: osc.id, port: 'out' }, { module: amp.id, port: 'cv' });
     expect(p.cables).toHaveLength(1);
-    expect(() => connect(p, getDef, { module: clock.id, port: 'out' }, { module: amp.id, port: 'in' })).toThrow(PatchError);
+    [p] = connect(p, getDef, { module: clock.id, port: 'out' }, { module: amp.id, port: 'in' });
+    expect(p.cables).toHaveLength(2);
   });
 
   it('does not duplicate an identical cable', () => {

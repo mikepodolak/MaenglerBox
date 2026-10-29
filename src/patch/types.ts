@@ -36,12 +36,17 @@ export interface ModuleDataDef<T = unknown> {
   normalize(raw: unknown): T;
 }
 
+export const MODULE_CATEGORIES = ['Sequencing', 'Generative', 'Sound', 'Modulation', 'Utility'] as const;
+export type ModuleCategory = (typeof MODULE_CATEGORIES)[number];
+
 /** Static description of a module type: what it's called and what it exposes. */
 export interface ModuleDef {
   type: string;
   label: string;
   /** One-line description shown in the module picker. */
   description?: string;
+  /** Heading the module is listed under in the module picker. */
+  category?: ModuleCategory;
   inputs: PortDef[];
   outputs: PortDef[];
   params: ParamDef[];

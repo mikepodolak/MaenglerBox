@@ -1,5 +1,6 @@
 import { allWorklets, getModuleType } from '../modules/registry';
 import type { Patch, PresetLibrary } from '../patch/types';
+import { CONVERT_WORKLETS } from './convert';
 import { PatchRuntime } from './PatchRuntime';
 import { Scheduler } from './Scheduler';
 
@@ -55,7 +56,7 @@ export class AudioEngine {
       unlockWithSilentBuffer(ctx);
       // Resume inside the gesture first; iOS only honours it synchronously.
       const resumed = ctx.resume();
-      this.worklets = Promise.all(allWorklets().map((url) => ctx.audioWorklet.addModule(url))).then(() => undefined);
+      this.worklets = Promise.all([...allWorklets(), ...CONVERT_WORKLETS].map((url) => ctx.audioWorklet.addModule(url))).then(() => undefined);
       await resumed;
     }
     await this.ctx.resume();

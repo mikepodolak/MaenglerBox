@@ -24,6 +24,7 @@ import {
 import type { ModuleDef, ModuleInstance, ParamDef, Patch, Preset } from '../patch/types';
 import { paramControl, type ParamControl } from './controls';
 import { h } from './dom';
+import { createEditor, type DataEditor } from './editors';
 import { TrackOverview, Tracker } from './Tracker';
 import { TRACKS, trackPort, type MultiTrackerData } from '../modules/multiTracker';
 
@@ -37,6 +38,7 @@ export class Inspector {
   private controls = new Map<string, ParamControl>();
   private steps: StepEditor | null = null;
   private presets: PresetPanel | null = null;
+  private editor: DataEditor | null = null;
 
   constructor(private readonly store: AppStore) {}
 
@@ -57,10 +59,14 @@ export class Inspector {
     }
     this.presets?.update(m);
     this.steps?.update(m);
+    this.editor?.update(m);
   }
 
   tick(state: (moduleId: string) => unknown): void {
-    if (this.moduleId) this.steps?.tick(state(this.moduleId));
+    if (!this.moduleId) return;
+    const s = state(this.moduleId);
+    this.steps?.tick(s);
+    this.editor?.tick?.(s);
   }
 
   private build(m: ModuleInstance): void {
@@ -94,6 +100,7 @@ export class Inspector {
 
     const stepped = m.type === 'sequencer' || m.type === 'tracker';
     this.steps = stepped ? new StepEditor(this.store, m.id, m.type === 'tracker') : null;
+    this.editor = createEditor(this.store, m);
     this.presets = def.presets ? new PresetPanel(this.store, m.id, stepped ? 'Patterns' : 'Presets', usesLibrary(def)) : null;
     const mutateAmount = h('input', { type: 'range', min: 1, max: 50, step: 1, 'aria-label': 'Mutate amount' });
     mutateAmount.value = '15';
@@ -126,6 +133,7 @@ export class Inspector {
       this.presets?.el ?? null,
       this.steps?.patternEl ?? null,
       this.steps?.el ?? null,
+      this.editor?.el ?? null,
       h(
         'section',
         { class: 'section settings' },
