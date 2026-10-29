@@ -61,6 +61,8 @@ export interface NoteEvent {
   note: number;
   velocity: number;
   length: number;
+  /** Settings for this note only, e.g. a preset picked by the sequencer step. */
+  params?: FMParams;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -128,6 +130,8 @@ export function midiToHz(note: number): number {
 }
 
 class Voice {
+  /** Per-note settings; null follows the synth's live settings. */
+  params: FMParams | null = null;
   note = 60;
   velocity = 0;
   startedAt = 0;
@@ -142,7 +146,8 @@ class Voice {
     return this.envs.some((e) => e.stage !== Stage.Idle);
   }
 
-  start(note: number, velocity: number, frame: number, releaseAt: number): void {
+  start(note: number, velocity: number, frame: number, releaseAt: number, params: FMParams | null): void {
+    this.params = params;
     this.note = note;
     this.velocity = velocity;
     this.startedAt = frame;
@@ -232,7 +237,10 @@ export class FMSynth {
       let sum = 0;
       for (const v of this.voices) {
         if (v.releaseAt <= frame) v.release();
-        if (v.active) sum += v.render(p, alg, sr);
+        if (!v.active) continue;
+        const vp = v.params;
+        // The module's level stays the master volume even for notes using a preset.
+        sum += vp ? v.render(vp, ALGORITHMS[Math.round(vp.algorithm)] ?? alg, sr) : v.render(p, alg, sr);
       }
       out[i] = sum * p.level * 0.5;
     }
@@ -241,7 +249,7 @@ export class FMSynth {
   private apply({ ev }: { ev: NoteEvent }, frame: number): void {
     const voice = this.pickVoice(ev.note);
     const releaseAt = frame + Math.max(1, Math.round(ev.length * this.sampleRate));
-    voice.start(ev.note, Math.min(1, Math.max(0, ev.velocity)), frame, releaseAt);
+    voice.start(ev.note, Math.min(1, Math.max(0, ev.velocity)), frame, releaseAt, ev.params ?? null);
   }
 
   /** Reuse a voice already on this note, then a free voice, else steal the oldest. */

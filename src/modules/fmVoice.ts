@@ -1,7 +1,7 @@
 import { ALGORITHM_DIAGRAMS, ALGORITHMS, defaultFMParams, type FMParams } from '../dsp/fm';
 import type { FMMessage } from '../dsp/fm.worklet';
 import fmWorkletUrl from '../dsp/fm.worklet.ts?worker&url';
-import type { ParamDef } from '../patch/types';
+import type { ParamDef, Preset } from '../patch/types';
 import type { ModuleType } from './types';
 
 const OPS = [1, 2, 3, 4];
@@ -65,21 +65,35 @@ export const fmVoice: ModuleType = {
     const node = new AudioWorkletNode(ctx, 'mb-fm', { numberOfInputs: 0, outputChannelCount: [1] });
     const send = (msg: FMMessage) => node.port.postMessage(msg);
     send({ type: 'params', params: toFMParams(p) });
+    let presets: (Preset | null)[] = [];
     return {
       inputs: {
         gate: {
           kind: 'gate',
-          handler: (e) =>
+          // A note carrying a preset number plays with that preset's sound, so one voice can be a whole kit.
+          handler: (e) => {
+            const preset = e.index ? presets[e.index - 1] : null;
+            const src = preset ? { ...p, ...preset.params } : p;
             send({
               type: 'note',
-              event: { time: e.time, note: (e.note ?? 60) + p.transpose, velocity: e.value, length: e.length },
-            }),
+              event: {
+                time: e.time,
+                note: (e.note ?? 60) + src.transpose,
+                velocity: e.value,
+                length: e.length,
+                params: preset ? toFMParams(src) : undefined,
+              },
+            });
+          },
         },
       },
       outputs: { out: { kind: 'node', node } },
       setParam(id, v) {
         p[id] = v;
         if (id !== 'transpose') send({ type: 'params', params: toFMParams(p) });
+      },
+      setPresets(list) {
+        presets = list;
       },
       dispose() {
         send({ type: 'dispose' });

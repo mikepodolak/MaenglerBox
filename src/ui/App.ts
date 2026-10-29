@@ -89,7 +89,7 @@ export class App {
 
   private render(): void {
     const p = this.store.patch;
-    this.engine.sync(p);
+    this.engine.sync(p, this.store.library);
     if (document.activeElement !== this.nameInput) this.nameInput.value = p.name;
     this.saveEl.textContent =
       this.store.saveState === 'saving' ? 'Saving…' : this.store.saveState === 'error' ? 'Not saved' : 'Saved';
