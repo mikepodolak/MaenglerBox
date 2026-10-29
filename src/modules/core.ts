@@ -41,6 +41,7 @@ const WAVES: OscillatorType[] = ['sine', 'triangle', 'sawtooth', 'square'];
 export const oscillator: ModuleType = {
   def: {
     type: 'oscillator',
+    presets: true,
     label: 'Oscillator',
     inputs: [{ id: 'fm', label: 'FM', kind: 'cv' }],
     outputs: [{ id: 'out', label: 'Out', kind: 'audio' }],
@@ -103,17 +104,49 @@ export const vca: ModuleType = {
   },
 };
 
-/** Attack/decay envelope fired by a gate. Outputs 0..1 scaled by velocity. */
+export const ENVELOPE_MODES = ['ADSR', 'ADR'];
+
+export interface EnvStage {
+  /** Level to head for, 0..1 of the velocity. */
+  target: number;
+  /** When the stage starts, seconds after the gate. */
+  at: number;
+  /** Seconds to (nearly) reach the target. */
+  time: number;
+}
+
+/**
+ * The stages an envelope runs for one gate, as data so it can be tested and drawn.
+ * ADSR holds at the sustain level while the gate is high, then releases.
+ * ADR decays all the way to zero while the gate is high; a gate that ends
+ * early cuts to the release from wherever it is.
+ */
+export function envelopeStages(p: Record<string, number>, gateLength: number): EnvStage[] {
+  const adsr = Math.round(p.mode ?? 1) === 0;
+  const end = Math.max(0, gateLength);
+  const stages: EnvStage[] = [{ target: 1, at: 0, time: p.attack }];
+  if (end > p.attack) stages.push({ target: adsr ? p.sustain : 0, at: p.attack, time: p.decay });
+  stages.push({ target: 0, at: end, time: p.release });
+  return stages;
+}
+
+/** ADSR or ADR envelope fired by a gate. Outputs 0..1 scaled by velocity. */
 export const envelope: ModuleType = {
   def: {
     type: 'envelope',
     label: 'Envelope',
+    description: 'ADSR or ADR envelope, fired by gates. Patch it into a VCA or any CV input.',
+    presets: true,
     inputs: [{ id: 'gate', label: 'Gate', kind: 'gate' }],
     outputs: [{ id: 'out', label: 'Out', kind: 'cv' }],
     params: [
+      { id: 'mode', label: 'Mode', min: 0, max: 1, default: 1, step: 1, options: ENVELOPE_MODES },
       { id: 'attack', label: 'Attack', min: 0.001, max: 2, default: 0.003, unit: 's', curve: 'exp' },
       { id: 'decay', label: 'Decay', min: 0.005, max: 4, default: 0.18, unit: 's', curve: 'exp' },
+      { id: 'sustain', label: 'Sustain', min: 0, max: 1, default: 0.6, step: 0.01 },
+      { id: 'release', label: 'Release', min: 0.005, max: 4, default: 0.12, unit: 's', curve: 'exp' },
     ],
+    face: ['mode', 'attack', 'decay'],
   },
   create({ ctx }, params) {
     const p = { ...params };
@@ -124,12 +157,11 @@ export const envelope: ModuleType = {
       inputs: {
         gate: {
           kind: 'gate',
-          handler: ({ time, value }) => {
+          handler: ({ time, value, length }) => {
             const o = src.offset;
             o.cancelScheduledValues(time);
             // Time constants of a third of the stage length land within ~5% of the target.
-            o.setTargetAtTime(value, time, p.attack / 3);
-            o.setTargetAtTime(0, time + p.attack, p.decay / 3);
+            for (const st of envelopeStages(p, length)) o.setTargetAtTime(st.target * value, time + st.at, st.time / 3);
           },
         },
       },

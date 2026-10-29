@@ -193,12 +193,16 @@ export function quantize(note: number, scale: number[], root = 0): number {
   return root + octave * 12 + best;
 }
 
+export const DIRECTIONS = ['Forward', 'Backward', 'Ping-pong', 'Random', 'Drunk'];
+
 export interface SequencerSettings {
   length: number;
   /** Global multiplier on every step's chance. */
   density: number;
   /** Above 0.5, 'fill' steps play and '!fill' steps rest. */
   fill?: number;
+  /** Index into DIRECTIONS. */
+  direction?: number;
   /** Max random pitch offset, in semitones. */
   pitchRandom: number;
   /** Chance that a note jumps an octave up or down. */
@@ -214,8 +218,13 @@ export interface SequencerSettings {
  */
 export class SequencerCore {
   position = -1;
-  /** Completed passes through the pattern since the last reset, for trig conditions. */
+  /**
+   * Completed passes through the pattern since the last reset, for trig
+   * conditions: one pass is `length` steps, whichever way they run.
+   */
   loop = 0;
+  private ticks = 0;
+  private pingDir = 1;
   private prevPlayed = false;
   /** Recent (time, step) pairs, so the UI can show what's sounding now rather than what's scheduled. */
   private history: { time: number; step: number }[] = [];
@@ -231,6 +240,8 @@ export class SequencerCore {
   reset(): void {
     this.position = -1;
     this.loop = 0;
+    this.ticks = 0;
+    this.pingDir = 1;
     this.prevPlayed = false;
   }
 
@@ -241,9 +252,9 @@ export class SequencerCore {
     this.lastClock = time;
 
     const len = Math.max(1, Math.min(MAX_STEPS, Math.round(this.settings.length)));
-    const next = this.position + 1;
-    if (next >= len && this.position >= 0) this.loop++;
-    this.position = next % len;
+    this.position = this.nextPosition(len);
+    this.loop = Math.floor(this.ticks / len);
+    this.ticks++;
     this.history.push({ time, step: this.position });
     if (this.history.length > 16) this.history.shift();
     const step = this.data.steps[this.position];
@@ -268,6 +279,34 @@ export class SequencerCore {
       });
     }
     return events;
+  }
+
+  private nextPosition(len: number): number {
+    const pos = this.position;
+    const fresh = pos < 0 || pos >= len;
+    switch (Math.round(this.settings.direction ?? 0)) {
+      case 1: // backward
+        return fresh ? len - 1 : (pos - 1 + len) % len;
+      case 2: {
+        // ping-pong: 0 1 2 3 2 1 0 1 …, ends played once per turn
+        if (fresh || len === 1) {
+          this.pingDir = 1;
+          return 0;
+        }
+        let next = pos + this.pingDir;
+        if (next >= len || next < 0) {
+          this.pingDir = -this.pingDir;
+          next = pos + this.pingDir;
+        }
+        return next;
+      }
+      case 3: // random
+        return Math.min(len - 1, Math.floor(this.random() * len));
+      case 4: // drunk: one step either way
+        return fresh ? 0 : (pos + (this.random() < 0.5 ? -1 : 1) + len) % len;
+      default:
+        return fresh ? 0 : (pos + 1) % len;
+    }
   }
 
   /** The step sounding at audio time `now`, or -1 before the first clock. */
@@ -311,10 +350,12 @@ export const sequencer: ModuleType = {
       { id: 'root', label: 'Root', min: 0, max: 11, default: 0, step: 1, options: NOTE_NAMES },
       { id: 'transpose', label: 'Transpose', min: -24, max: 24, default: 0, step: 1, unit: 'st' },
       { id: 'fill', label: 'Fill', min: 0, max: 1, default: 0, step: 1, options: ['Off', 'On'] },
+      { id: 'direction', label: 'Play', min: 0, max: DIRECTIONS.length - 1, default: 0, step: 1, options: DIRECTIONS },
     ],
     face: ['density', 'pitchRandom'],
     data: sequencerData as ModuleDataDef,
     presetScope: 'patch',
+    presets: true,
   },
   create(_env, params, data) {
     const out = new GateOutput();

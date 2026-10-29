@@ -43,6 +43,7 @@ export const fmVoice: ModuleType = {
   worklets: [fmWorkletUrl],
   def: {
     type: 'fm',
+    presets: true,
     label: 'FM Voice',
     description: '4-operator FM synth with 8 algorithms. Play it from a sequencer.',
     inputs: [{ id: 'gate', label: 'Notes', kind: 'gate' }],

@@ -37,14 +37,17 @@ Patches are saved on the device (IndexedDB).
 Ports carry three kinds of signal: **audio**, **cv** (modulation) and **gate** (timed events like triggers and notes).
 ## Presets, patterns and randomizing
 
-- Every module has 16 slots. Pick **Load**, **Save** or **Clear**, then tap a slot. A synth's presets live in a library shared by every patch on the device. A sequencer's slots are its pattern bank and are saved with the patch.
+- Instruments and sequencers (FM voice, oscillator, envelope, Chance Sequencer, Tracker) have 16 slots, folded away under **Presets** / **Patterns** until you open them. Utilities like Output, VCA and Clock don't.
+- Every slot panel works the same way. Pick **Load**, **Save** or **Clear**, then tap a slot. A synth's presets live in a library shared by every patch on the device. A sequencer's slots are its pattern bank and are saved with the patch.
 - **Randomize** sets every setting to a random value; **Mutate** nudges each one by the amount slider. Tap a padlock to keep that setting.
 - In the sequencer, **Randomize pattern** and **Mutate pattern** rewrite the steps, keeping notes in the chosen scale. The **Keep** buttons protect a step field (notes, chance, …) from both.
 - A step's **Preset** value makes the synth it plays play that note with the matching preset, so one FM voice can be a kick on step 1 and a snare on step 5.
 
 ## Tracker, conditions and parameter locks
 
+- The sequencer's **Play** setting picks the direction: forward, backward, ping-pong, random, or drunk (one step either way).
 - In the sequencer's settings, switch **Steps** between **Grid** and **Tracker**. The tracker shows one row per step: note, velocity, chance, ratchet, condition, preset and lock count. Tap a cell to put the cursor on it, then use **−− − + ++** to change it. Nudging the note of an empty row switches it on.
+- Tap **What the columns mean** above the tracker for a key to the column letters.
 - **Conditions** decide which loops a step plays on: `1:2` plays on the first of every two loops, `3:4` on the third of four, **First loop**, **If prev played**, and **Fill** (follows the sequencer's Fill switch).
 - **Parameter locks** override a setting of the synth for one step only. Pick one from **+ Lock a setting…**; the list shows the settings of the synth the sequencer's Notes output is patched to.
 

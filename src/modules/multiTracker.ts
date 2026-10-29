@@ -55,6 +55,7 @@ export const multiTracker: ModuleType = {
     face: [],
     data: multiTrackerData as ModuleDataDef,
     presetScope: 'patch',
+    presets: true,
   },
   create(_env, params, data) {
     const settings = { ...(params as unknown as SequencerSettings) };

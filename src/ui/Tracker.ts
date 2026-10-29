@@ -71,6 +71,7 @@ export class Tracker {
   private data: SequencerData | null = null;
   private barLabel = h('output', { class: 'trk-value' });
   private nudgeBtns: HTMLButtonElement[] = [];
+  private toggleBtn = h('button', { class: 'trk-toggle', onclick: () => this.toggle() }, 'On/Off');
 
   constructor(
     private readonly onSelect: (step: number) => void,
@@ -85,8 +86,8 @@ export class Tracker {
       this.nudgeBtns.push(b);
       bar.append(b);
     }
-    bar.append(h('button', { class: 'trk-toggle', onclick: () => this.toggle() }, 'On/Off'));
-    this.el.append(head, this.rows, bar);
+    bar.append(this.toggleBtn);
+    this.el.append(trackerHelp(), head, this.rows, bar);
   }
 
   update(data: SequencerData, len: number, selected: number): void {
@@ -138,20 +139,21 @@ export class Tracker {
     });
     const c = COLS.find((x) => x.id === this.col)!;
     const s = this.data.steps[this.row];
-    this.barLabel.textContent = `${String(this.row + 1).padStart(2, '0')} ${c.name}: ${
-      c.id === 'cond' ? CONDITIONS.find((x) => x.id === s.cond)?.label : c.show(s)
-    }`;
-    for (const b of this.nudgeBtns) b.disabled = !c.nudge;
+    this.barLabel.textContent = s
+      ? `${String(this.row + 1).padStart(2, '0')} ${c.name}: ${c.id === 'cond' ? CONDITIONS.find((x) => x.id === s.cond)?.label : c.show(s)}`
+      : 'Tap a cell to edit it';
+    for (const b of this.nudgeBtns) b.disabled = !s || !c.nudge;
+    this.toggleBtn.disabled = !s;
   }
 
   private nudge(dir: number, big: boolean): void {
     const c = COLS.find((x) => x.id === this.col);
-    if (!c?.nudge || !this.data) return;
+    if (!c?.nudge || !this.data?.steps[this.row]) return;
     this.onEdit(this.row, c.nudge(this.data.steps[this.row], dir, big), `trk:${this.col}`);
   }
 
   private toggle(): void {
-    if (!this.data) return;
+    if (!this.data?.steps[this.row]) return;
     this.onEdit(this.row, { on: !this.data.steps[this.row].on }, 'trk:on');
   }
 }
@@ -171,6 +173,7 @@ export class TrackOverview {
   private playing = -1;
   private data: { tracks: SequencerData[]; mutes: boolean[] } | null = null;
   private barLabel = h('output', { class: 'trk-value' });
+  private barBtns: HTMLButtonElement[] = [];
 
   constructor(
     private readonly trackCount: number,
@@ -188,10 +191,11 @@ export class TrackOverview {
     head.style.setProperty('--tracks', String(trackCount));
     const bar = h('div', { class: 'trk-bar' }, this.barLabel);
     for (const [label, dir, big] of [['−−', -1, true], ['−', -1, false], ['+', 1, false], ['++', 1, true]] as const) {
-      bar.append(h('button', { 'aria-label': `Note ${dir > 0 ? 'up' : 'down'}${big ? ' an octave' : ''}`, onclick: () => this.nudge(dir, big) }, label));
+      this.barBtns.push(h('button', { 'aria-label': `Note ${dir > 0 ? 'up' : 'down'}${big ? ' an octave' : ''}`, onclick: () => this.nudge(dir, big) }, label));
     }
-    bar.append(h('button', { class: 'trk-toggle', onclick: () => this.toggle() }, 'On/Off'));
-    this.el.append(head, this.rows, bar);
+    this.barBtns.push(h('button', { class: 'trk-toggle', onclick: () => this.toggle() }, 'On/Off'));
+    bar.append(...this.barBtns);
+    this.el.append(overviewHelp(), head, this.rows, bar);
   }
 
   update(data: { tracks: SequencerData[]; mutes: boolean[] }, len: number, track: number, step: number): void {
@@ -253,10 +257,13 @@ export class TrackOverview {
       }),
     );
     const s = d.tracks[this.track].steps[this.step];
-    this.barLabel.textContent = `T${this.track + 1} ${String(this.step + 1).padStart(2, '0')} ${s.on ? noteName(s.note) : '---'}`;
+    this.barLabel.textContent =
+      this.step >= 0 && s ? `T${this.track + 1} ${String(this.step + 1).padStart(2, '0')} ${s.on ? noteName(s.note) : '---'}` : 'Tap a cell to edit it';
+    for (const b of this.barBtns) b.disabled = this.step < 0;
   }
 
   private nudge(dir: number, big: boolean): void {
+    if (this.step < 0) return;
     const s = this.data?.tracks[this.track].steps[this.step];
     if (!s) return;
     const note = s.on ? clamp(s.note + dir * (big ? 12 : 1), 0, 127) : s.note;
@@ -264,7 +271,43 @@ export class TrackOverview {
   }
 
   private toggle(): void {
+    if (this.step < 0) return;
     const s = this.data?.tracks[this.track].steps[this.step];
     if (s) this.onEdit(this.track, this.step, { on: !s.on }, 'ovw:on');
   }
+}
+
+/** A collapsed "how to read this" note above the tracker. */
+function trackerHelp(): HTMLElement {
+  return h(
+    'details',
+    { class: 'trk-help' },
+    h('summary', {}, 'What the columns mean'),
+    h(
+      'dl',
+      {},
+      ...COLS.flatMap((c) => [h('dt', {}, c.head), h('dd', {}, COL_HELP[c.id])]),
+    ),
+    h('p', {}, 'Tap a cell to put the cursor on it, then use −− − + ++ below to change it. Tap the note cell under the cursor to switch the step on or off.'),
+  );
+}
+
+const COL_HELP: Record<Col, string> = {
+  note: 'Note. --- means the step is off; nudging it switches it on.',
+  velocity: 'Velocity, 00–99. How hard the note hits.',
+  chance: 'Chance, 00–99. How likely the step is to play each time round.',
+  ratchet: 'Ratchet: 2×–4× plays the note that many times within the step.',
+  cond: 'Condition: which loops the step plays on, e.g. 1:2 = first of every two loops, PRE = only if the step before played.',
+  send: 'Preset number sent with the note; the synth plays it with that preset.',
+  plocks: 'How many of the synth\'s settings this step locks (set in the step editor below).',
+};
+
+function overviewHelp(): HTMLElement {
+  return h(
+    'details',
+    { class: 'trk-help' },
+    h('summary', {}, 'How this view works'),
+    h('p', {}, 'Each column is a track and each row a step; cells show the note, or --- when the step is off. Tap a cell to edit that step below, and use −− − + ++ to change its note. Tap a track number at the top to mute or unmute it.'),
+    h('p', {}, 'A yellow dot means the step has a condition; a teal dot means it has parameter locks.'),
+  );
 }
