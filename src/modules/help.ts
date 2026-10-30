@@ -172,6 +172,23 @@ export const HELP: Record<string, ModuleHelp> = {
       { title: 'Balls drive it', text: 'Patch Bouncing Balls Floor into Clock: the chain only moves when a ball hits the floor.' },
     ],
   },
+  matrix: {
+    about: 'A routing matrix, like the grid between the sequencers and synths in Autechre-style Max patches. Each row is an input and each column an output; the dial where they cross is the chance that a gate from that input reaches that output. It starts straight through (In 1 to Out 1 and so on). Tap a dial to step its chance or drag it up and down; in Play mode, long-press to show the jacks.',
+    inputs: { in1: 'Gates and notes for row 1 (likewise In 2–8).' },
+    outputs: { out1: 'Whatever rows reach column 1 (likewise Out 2–8).' },
+    settings: { mode: 'Each by chance: every crossing in a row rolls its own chance, so one note can reach several outputs. Pick one: each note goes to exactly one output, chosen by the row’s dials as odds.' },
+    ideas: [
+      {
+        title: 'One line, two voices',
+        text: 'A sequencer into In 1, with Out 1 on an FM Lead and Out 2 on a Pluck. Turn up row 1’s second dial and set Mode to Pick one: each note goes to one voice or the other.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, self: { type: 'matrix', params: { mode: 1 } }, lead: { type: 'lead' }, pl: { type: 'pluck' }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > self.in1', 'self.out1 > lead.gate', 'self.out2 > pl.gate', 'lead.out > out.left', 'pl.out > out.right'],
+        },
+      },
+      { title: 'Shuffle the band', text: 'Patch four sequencers into In 1–4 and four voices onto Out 1–4, then move dials during the set to swap which part each voice plays.' },
+    ],
+  },
   balls: {
     about: 'Balls fall under gravity inside a box and bounce off the walls, the floor and each other. Every bounce is an event you can patch: floor hits play notes picked by where the ball lands (left = low, right = high), wall and ball-to-ball collisions fire their own gates, and ball 1’s position comes out as X and Y CV. It runs on its own; it needs no clock.',
     inputs: { kick: 'Throws every ball upward. Patch a slow clock or a Chance Gate here to keep things moving.', reset: 'Drops the balls again from new spots.' },
@@ -411,6 +428,20 @@ export const HELP: Record<string, ModuleHelp> = {
           cables: ['clock.out > mk.clock', 'mk.notes > self.gate', 'self.out > out.left', 'self.out > out.right'],
         },
       },
+    ],
+  },
+  conductor: {
+    about: 'Sets the key, scale and overall note chance for the whole patch. Every note on its way into a synth or effect is transposed, moved to the nearest note of the scale, and let through only with Chance, wherever it came from. One per patch is enough. Patch an LFO or a Turing Machine onto Key or Chance (from its settings) to change key or density as it plays.',
+    settings: {
+      enabled: 'Off lets every note through untouched.',
+      root: 'The key.',
+      scale: 'The scale every note is moved into.',
+      chance: 'The chance each note reaches its voice: lower it to thin out the whole patch at once.',
+      transpose: 'Shifts every note before it is put in key.',
+    },
+    ideas: [
+      { title: 'Everything in key', text: 'Add a Conductor to a patch with a Turing Machine and a Markov Chain playing different voices. Pick Minor pentatonic: random notes from anywhere now agree.' },
+      { title: 'Breathing density', text: 'Patch a slow LFO onto Chance: the whole patch thins out and fills back in.' },
     ],
   },
   vca: {

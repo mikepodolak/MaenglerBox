@@ -1842,3 +1842,50 @@ a.button {
 .node.visual.collapsed .light-face {
   padding: 4px 0 10px;
 }
+
+/* ---- conductor ---- */
+
+.conductor-face {
+  display: grid;
+  gap: 6px;
+  padding: 4px 12px 10px;
+}
+
+.conductor-key {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.conductor-face.off .conductor-key {
+  color: var(--muted);
+}
+
+.conductor-keys {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 2px;
+  height: 26px;
+}
+
+.conductor-keys span {
+  border-radius: 3px;
+  background: #3a3e46;
+}
+
+.conductor-keys span.black {
+  background: #24262b;
+  height: 70%;
+}
+
+.conductor-keys span.in {
+  background: color-mix(in srgb, var(--accent) 55%, #24262b);
+}
+
+.conductor-keys span.root {
+  background: var(--accent);
+}
+
+.conductor-face.off .conductor-keys span.in {
+  background: #3a3e46;
+}

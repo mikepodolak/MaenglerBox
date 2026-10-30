@@ -1,6 +1,7 @@
 import type { GateHandler, GateOutput } from '../engine/gate';
 import type { Scheduler } from '../engine/Scheduler';
 import type { ModuleDef, Preset } from '../patch/types';
+import type { Globals } from './conductor';
 
 /** Where a cable lands on a module's input. */
 export type InputTarget =
@@ -30,6 +31,8 @@ export interface EngineEnv {
   scheduler: Scheduler;
   /** Final bus before the speakers. Output modules connect here. */
   master: AudioNode;
+  /** Patch-wide key, scale and note chance, set by the Conductor. */
+  globals?: Globals;
 }
 
 export interface ModuleType {

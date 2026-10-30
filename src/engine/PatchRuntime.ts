@@ -1,4 +1,5 @@
 import type { EngineEnv, InputTarget, ModuleType, OutputSource, RuntimeModule } from '../modules/types';
+import { conduct } from '../modules/conductor';
 import { DEFAULT_MOD_AMOUNT, modParam, modulatedValue } from '../patch/model';
 import type { Cable, ModuleInstance, Patch, Preset, PresetLibrary } from '../patch/types';
 import { gateToSignal, signalToGate } from './convert';
@@ -160,8 +161,21 @@ export class PatchRuntime {
   private wire(cable: Cable): (() => void) | null {
     if (modParam(cable.to.port) !== null) return this.wireMod(cable);
     const src = this.modules.get(cable.from.module)?.runtime.outputs[cable.from.port];
-    const dst = this.modules.get(cable.to.module)?.runtime.inputs[cable.to.port];
+    let dst = this.modules.get(cable.to.module)?.runtime.inputs[cable.to.port];
     if (!src || !dst) return null;
+    // Notes going into a voice or effect pass the Conductor first: into its key, thinned by its chance.
+    const category = this.lookup(this.modules.get(cable.to.module)!.instance.type)?.def.category;
+    if (dst.kind === 'gate' && (category === 'Sound' || category === 'Effects')) {
+      const { handler } = dst;
+      const globals = this.env.globals;
+      dst = {
+        kind: 'gate',
+        handler: (e) => {
+          const out = conduct(globals, e);
+          if (out) handler(out);
+        },
+      };
+    }
     return connectPorts(src, dst, this.env.ctx);
   }
 
