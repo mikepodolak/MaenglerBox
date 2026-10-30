@@ -214,6 +214,9 @@ export function deserializePatch(json: unknown, defs: DefLookup): Patch {
       const jacks = [...new Set(m.modJacks.filter((id): id is string => typeof id === 'string' && id in params))];
       if (jacks.length) mod.modJacks = jacks;
     }
+    if (isObject(m.morph) && Number.isInteger(m.morph.b) && (m.morph.a === null || Number.isInteger(m.morph.a))) {
+      mod.morph = { a: m.morph.a as number | null, b: m.morph.b as number };
+    }
     if (Array.isArray(m.locks)) mod.locks = m.locks.filter((id): id is string => typeof id === 'string' && id in params);
     modules.push(mod);
   }

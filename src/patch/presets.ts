@@ -1,6 +1,6 @@
 import { findModule, PatchError, type DefLookup } from './model';
 import { fromNormalized, toNormalized } from './params';
-import type { ModuleDef, ModuleInstance, Patch, Preset } from './types';
+import type { ModuleDef, ModuleInstance, ParamDef, Patch, Preset } from './types';
 
 /** Slots per module, M8-style. */
 export const PRESET_SLOTS = 16;
@@ -19,9 +19,15 @@ export function usesLibrary(def: ModuleDef | undefined): boolean {
   return (def?.presetScope ?? 'library') === 'library';
 }
 
+/** The setting that blends between two presets. Instruments with library presets get it. */
+export const MORPH = 'morph';
+
+export const morphParam: ParamDef = { id: MORPH, label: 'Morph', min: 0, max: 1, default: 0, step: 0.01 };
+
 /** A preset holding the module's current settings. */
 export function capturePreset(m: ModuleInstance, name: string): Preset {
-  const preset: Preset = { name, params: { ...m.params } };
+  const { [MORPH]: _, ...params } = m.params;
+  const preset: Preset = { name, params };
   if (m.data !== undefined) preset.data = m.data;
   return preset;
 }
@@ -80,7 +86,7 @@ export function renamePreset(patch: Patch, moduleId: string, slot: number, name:
 /** Only params the module still has, so presets survive a module gaining or losing settings. */
 function presetParams(preset: Preset, current: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const k of Object.keys(current)) if (typeof preset.params[k] === 'number') out[k] = preset.params[k];
+  for (const k of Object.keys(current)) if (k !== MORPH && typeof preset.params[k] === 'number') out[k] = preset.params[k];
   return out;
 }
 
@@ -112,7 +118,7 @@ export function randomizeParams(patch: Patch, defs: DefLookup, moduleId: string,
   const locks = new Set(m.locks ?? []);
   const params = { ...m.params };
   for (const p of def.params) {
-    if (locks.has(p.id)) continue;
+    if (locks.has(p.id) || p.id === MORPH) continue;
     if (p.options) {
       // Choices jump rather than drift: switch with a chance equal to the amount.
       if (rnd() < amount) params[p.id] = p.min + Math.floor(rnd() * p.options.length);
@@ -138,4 +144,48 @@ export function normalizePresets(raw: unknown, normalizeData?: (d: unknown) => u
     if (r.data !== undefined) preset.data = normalizeData ? normalizeData(r.data) : r.data;
     return preset;
   });
+}
+
+/** Start morphing from `a` (a slot, or null for the module's own settings) toward slot `b`; null stops. */
+export function setMorph(patch: Patch, moduleId: string, morph: { a: number | null; b: number } | null): Patch {
+  if (morph) {
+    checkSlot(morph.b);
+    if (morph.a !== null) checkSlot(morph.a);
+  }
+  return updateModule(patch, moduleId, (m) => {
+    const { morph: _, ...rest } = m;
+    return morph ? { ...rest, morph } : rest;
+  });
+}
+
+/**
+ * The settings a morphing module plays with: each one part way from preset A
+ * to preset B by `amount`, measured along its slider so exponential settings
+ * glide evenly. Choices switch half way. Settings a preset doesn't have, and
+ * Morph itself, keep the module's own value.
+ */
+export function morphParams(
+  def: ModuleDef,
+  own: Record<string, number>,
+  bank: readonly (Preset | null)[] | undefined,
+  morph: { a: number | null; b: number } | undefined,
+  amount: number,
+): Record<string, number> {
+  const to = morph && bank?.[morph.b];
+  if (!to) return own;
+  const from = morph.a === null ? own : bank?.[morph.a]?.params ?? own;
+  const t = Math.min(1, Math.max(0, amount));
+  const out = { ...own };
+  for (const p of def.params) {
+    if (p.id === MORPH) continue;
+    const a = from[p.id] ?? own[p.id];
+    const b = to.params[p.id] ?? own[p.id];
+    if (typeof a !== 'number' || typeof b !== 'number' || a === b) {
+      if (typeof a === 'number') out[p.id] = a;
+      continue;
+    }
+    const na = toNormalized(p, a);
+    out[p.id] = t === 0 ? a : t === 1 ? b : fromNormalized(p, na + (toNormalized(p, b) - na) * t);
+  }
+  return out;
 }

@@ -1889,3 +1889,35 @@ a.button {
 .conductor-face.off .conductor-keys span.in {
   background: #3a3e46;
 }
+
+/* Morph: two preset pickers and a slider, under the slots. */
+.presets .morph {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+}
+.presets .morph h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.morph-pick {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.morph-pick label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 140px;
+  font-size: 13px;
+}
+.morph-pick select {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+}
+.morph-body.off {
+  opacity: 0.45;
+}

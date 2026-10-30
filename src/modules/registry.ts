@@ -1,3 +1,4 @@
+import { MORPH, morphParam, usesLibrary } from '../patch/presets';
 import type { ModuleDef } from '../patch/types';
 import { clock, envelope, oscillator, output, vca } from './core';
 import { balls } from './balls';
@@ -17,6 +18,8 @@ import type { ModuleType } from './types';
 const types = new Map<string, ModuleType>();
 
 export function register(t: ModuleType): void {
+  // Instruments with a preset library can blend between two of their presets.
+  if (t.def.presets && usesLibrary(t.def) && !t.def.params.some((p) => p.id === MORPH)) t.def.params = [...t.def.params, morphParam];
   types.set(t.def.type, t);
 }
 

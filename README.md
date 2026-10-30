@@ -96,6 +96,14 @@ The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or 
 - **Filter**: low/high/band pass and notch, 12 or 24 dB, with resonance; the card draws the response and follows any cable on Cutoff.
 - **EQ**: low shelf, sweepable mid, high shelf, ±15 dB, with the curve drawn on the card.
 
+## Autechre-style setup
+
+- **FM Lead**: a 2-operator FM voice with a resonant low-pass and its own filter envelope, in the spirit of a Nord Lead patch.
+- **Pluck**: a Karplus-Strong string: decay, brightness, pluck tone and position.
+- **Matrix**: routes 8 gate inputs to 8 outputs. Each crossing is a chance, tapped or dragged right on the card. In **Pick one** mode each note goes to exactly one output, with the row as odds.
+- **Conductor**: one per patch. Sets the key, scale and overall chance for every voice: notes going into any synth or effect are transposed, moved into the key and thinned, wherever they come from. Patch an LFO onto Chance to make the whole patch breathe.
+- **Preset morphing**: synths with a preset library get a **Morph** section under their presets. Pick From (a slot or the current settings) and To, then move Morph to blend every setting between them, or drop an LFO on Morph to sweep it.
+
 ## Roadmap
 
 1. Foundation: app shell, offline support, audio engine, patch model, on-device saving.

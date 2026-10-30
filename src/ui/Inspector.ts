@@ -15,10 +15,12 @@ import {
   applyPreset,
   capturePreset,
   clearPreset,
+  MORPH,
   PRESET_SLOTS,
   randomizeParams,
   savePreset,
   setLocked,
+  setMorph,
   usesLibrary,
 } from '../patch/presets';
 import { fullParamLabel } from '../patch/params';
@@ -99,7 +101,8 @@ export class Inspector {
       return c.el;
     };
     const byId = new Map(def.params.map((p) => [p.id, p]));
-    const grouped = new Set((def.groups ?? []).flatMap((g) => g.params));
+    // Morph lives with the presets it blends, not among the settings.
+    const grouped = new Set([...(def.groups ?? []).flatMap((g) => g.params), MORPH]);
     const rest = def.params.filter((p) => !grouped.has(p.id));
     const groups = [
       ...(def.groups ?? []).map((g) => ({ label: g.label, params: g.params.map((id) => byId.get(id)!).filter(Boolean) })),
@@ -111,6 +114,8 @@ export class Inspector {
     this.editor = createEditor(this.store, m);
     this.mods = new ModPanel(this.store, m.id);
     this.presets = def.presets ? new PresetPanel(this.store, m.id, stepped ? 'Patterns' : 'Presets', usesLibrary(def)) : null;
+    const morph = byId.get(MORPH);
+    if (morph) this.presets?.addMorph(control(morph));
     const mutateAmount = h('input', { type: 'range', min: 1, max: 50, step: 1, 'aria-label': 'Mutate amount' });
     mutateAmount.value = '15';
     const randomizeBar = h(
@@ -221,6 +226,52 @@ class PresetPanel {
     if (shared) this.el.append(h('p', { class: 'hint' }, 'Shared by every patch on this device.'));
   }
 
+  private morphFrom: HTMLSelectElement | null = null;
+  private morphTo: HTMLSelectElement | null = null;
+  private morphBody: HTMLElement | null = null;
+
+  /**
+   * Blend between two presets with one slider (which a cable can move): From
+   * is a slot or the module's own settings, To is a slot or Off.
+   */
+  addMorph(slider: HTMLElement): void {
+    this.morphFrom = h('select', { 'aria-label': 'Morph from' });
+    this.morphTo = h('select', { 'aria-label': 'Morph to' });
+    const change = () => {
+      const b = Number(this.morphTo!.value);
+      const a = this.morphFrom!.value === 'own' ? null : Number(this.morphFrom!.value);
+      this.store.update((p) => setMorph(p, this.moduleId, b >= 0 ? { a, b } : null));
+    };
+    this.morphFrom.addEventListener('change', change);
+    this.morphTo.addEventListener('change', change);
+    this.morphBody = h('div', { class: 'morph-body' }, slider);
+    this.el.append(
+      h(
+        'div',
+        { class: 'morph' },
+        h('h4', {}, 'Morph'),
+        h('div', { class: 'morph-pick' }, h('label', {}, 'From ', this.morphFrom), h('label', {}, 'To ', this.morphTo)),
+        this.morphBody,
+        h('p', { class: 'hint' }, 'While morphing, the settings follow the slider from one preset to the other. Patch an LFO onto Morph to sweep it.'),
+      ),
+    );
+  }
+
+  private paintMorph(): void {
+    const m = this.module;
+    if (!m || !this.morphFrom || !this.morphTo) return;
+    const bank = this.bank();
+    const opts = (first: [string, string]) => [
+      h('option', { value: first[0] }, first[1]),
+      ...bank.flatMap((p, i) => (p ? [h('option', { value: String(i) }, `${i + 1}: ${p.name}`)] : [])),
+    ];
+    this.morphFrom.replaceChildren(...opts(['own', 'Current settings']));
+    this.morphTo.replaceChildren(...opts(['-1', 'Off']));
+    this.morphFrom.value = m.morph?.a == null ? 'own' : String(m.morph.a);
+    this.morphTo.value = m.morph ? String(m.morph.b) : '-1';
+    this.morphBody?.classList.toggle('off', !m.morph);
+  }
+
   private bank(): readonly (Preset | null)[] {
     const m = this.module;
     if (!m) return [];
@@ -263,6 +314,7 @@ class PresetPanel {
       b.replaceChildren(h('span', { class: 'slot-num' }, String(i + 1)), h('span', { class: 'slot-name' }, p?.name ?? ''));
       b.setAttribute('aria-label', `Slot ${i + 1}${p ? `: ${p.name}` : ', empty'}`);
     });
+    this.paintMorph();
   }
 }
 

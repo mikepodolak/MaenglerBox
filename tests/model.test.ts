@@ -91,7 +91,7 @@ describe('deserializePatch', () => {
     };
     const p = deserializePatch(raw, getDef);
     expect(p.modules.map((m) => m.id)).toEqual(['a']);
-    expect(p.modules[0].params).toEqual({ freq: 20, wave: 0, fmDepth: 0 });
+    expect(p.modules[0].params).toEqual({ freq: 20, wave: 0, fmDepth: 0, morph: 0 });
     expect(p.cables).toEqual([]);
   });
 

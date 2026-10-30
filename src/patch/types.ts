@@ -91,6 +91,11 @@ export interface ModuleInstance {
   width?: number;
   /** Params given a jack on the card so a cable can modulate them, in the order added. */
   modJacks?: string[];
+  /**
+   * The two presets the Morph setting blends between: preset slots, or null
+   * for the module's own settings. Absent when the module isn't morphing.
+   */
+  morph?: { a: number | null; b: number };
 }
 
 export interface Preset {
