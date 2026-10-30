@@ -88,8 +88,8 @@ export class Inspector {
         m.params[p.id],
         (v) => this.store.update((x) => setParam(x, getDef, m.id, p.id, v), `param:${m.id}:${p.id}`),
         false,
-        // Padlocks only matter where there's a Randomize button.
-        def.presets
+        // Padlocks only matter where there's a Randomize button (which leaves Morph alone).
+        def.presets && p.id !== MORPH
           ? () => {
               const locked = !(this.current()?.locks ?? []).includes(p.id);
               this.store.update((x) => setLocked(x, m.id, p.id, locked));
@@ -229,6 +229,8 @@ class PresetPanel {
   private morphFrom: HTMLSelectElement | null = null;
   private morphTo: HTMLSelectElement | null = null;
   private morphBody: HTMLElement | null = null;
+  /** From, remembered while To is still Off. */
+  private morphStart: number | null = null;
 
   /**
    * Blend between two presets with one slider (which a cable can move): From
@@ -240,6 +242,7 @@ class PresetPanel {
     const change = () => {
       const b = Number(this.morphTo!.value);
       const a = this.morphFrom!.value === 'own' ? null : Number(this.morphFrom!.value);
+      this.morphStart = a;
       this.store.update((p) => setMorph(p, this.moduleId, b >= 0 ? { a, b } : null));
     };
     this.morphFrom.addEventListener('change', change);
@@ -267,7 +270,8 @@ class PresetPanel {
     ];
     this.morphFrom.replaceChildren(...opts(['own', 'Current settings']));
     this.morphTo.replaceChildren(...opts(['-1', 'Off']));
-    this.morphFrom.value = m.morph?.a == null ? 'own' : String(m.morph.a);
+    const a = m.morph ? m.morph.a : this.morphStart;
+    this.morphFrom.value = a === null || !bank[a] ? 'own' : String(a);
     this.morphTo.value = m.morph ? String(m.morph.b) : '-1';
     this.morphBody?.classList.toggle('off', !m.morph);
   }
