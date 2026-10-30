@@ -88,6 +88,18 @@ In the settings panel, **Modulation** lists each patched setting with an Amount 
 
 The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or synced to a clock (one cycle every so many ticks), a Reset input, and −1..1 or 0..1 range.
 
+## Effects
+
+- **Tape Delay**: darkening, saturating repeats with wow and flutter; patch a clock in to sync the echo time.
+- **Reverb**: stereo room from small to huge, with damping and pre-delay (mono Out, plus L and R).
+- **Phaser**: 4, 6 or 8 swept all-pass stages.
+- **Flanger**: a tiny swept delay with positive or negative feedback.
+- **Comb**: rings at a pitch; patch notes in and it follows the melody (a resonator, or Karplus-style plucks from drums or clicks).
+- **Ring Mod**: multiplies by a built-in carrier or any audio patched into Carrier.
+- **Glitch**: on each clock tick it may stutter the slice it just heard, sometimes backwards, with bit and sample-rate crushing.
+
+The flanger and comb run on a per-sample delay line in a worklet, because Web Audio's own delay can't feed back faster than 128 samples.
+
 ## Roadmap
 
 1. Foundation: app shell, offline support, audio engine, patch model, on-device saving.
