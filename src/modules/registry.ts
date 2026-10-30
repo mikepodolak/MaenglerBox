@@ -4,6 +4,7 @@ import { clock, envelope, oscillator, output, vca } from './core';
 import { balls } from './balls';
 import { conductor } from './conductor';
 import { fmVoice } from './fmVoice';
+import { comb, delay, flanger, glitch, phaser, reverb, ringMod } from './fx';
 import { fmLead, pluck } from './voices';
 import { chanceGate, euclid, probability, sampleHold, turing } from './generative';
 import { lfo } from './lfo';
@@ -27,6 +28,7 @@ for (const t of [
   clock, sequencer, multiTracker, euclid, turing,
   chanceGate, probability, markov, matrix, balls, life,
   fmVoice, fmLead, pluck, oscillator,
+  delay, reverb, phaser, flanger, comb, ringMod, glitch,
   envelope, lfo, sampleHold,
   filter, eq,
   vca, mixer, meter, light, conductor, output,

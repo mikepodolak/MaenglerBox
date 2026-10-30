@@ -104,6 +104,18 @@ The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or 
 - **Conductor**: one per patch. Sets the key, scale and overall chance for every voice: notes going into any synth or effect are transposed, moved into the key and thinned, wherever they come from. Patch an LFO onto Chance to make the whole patch breathe.
 - **Preset morphing**: synths with a preset library get a **Morph** section under their presets. Pick From (a slot or the current settings) and To, then move Morph to blend every setting between them, or drop an LFO on Morph to sweep it.
 
+## Effects
+
+- **Tape Delay**: darkening, saturating repeats with wow and flutter; patch a clock in to sync the echo time.
+- **Reverb**: stereo room from small to huge, with damping and pre-delay (mono Out, plus L and R).
+- **Phaser**: 4, 6 or 8 swept all-pass stages.
+- **Flanger**: a tiny swept delay with positive or negative feedback.
+- **Comb**: rings at a pitch; patch notes in and it follows the melody (a resonator, or Karplus-style plucks from drums or clicks).
+- **Ring Mod**: multiplies by a built-in carrier or any audio patched into Carrier.
+- **Glitch**: on each clock tick it may stutter the slice it just heard, sometimes backwards, with bit and sample-rate crushing.
+
+The flanger and comb run on a per-sample delay line in a worklet, because Web Audio's own delay can't feed back faster than 128 samples.
+
 ## Roadmap
 
 1. Foundation: app shell, offline support, audio engine, patch model, on-device saving.
