@@ -5,6 +5,10 @@ import { setSlot } from '../patch/presets';
 import type { Patch, Preset, PresetLibrary } from '../patch/types';
 import { debounce, PatchStore } from '../storage/patchStore';
 import { asCopy, exportPatch, mergeLibrary, parsePatchFile, type PatchFile } from '../patch/exchange';
+import { seedLibrary } from '../modules/factory';
+
+/** Module types whose factory presets this device has already been given. */
+const FACTORY_KEY = 'maenglerbox:factory-presets';
 
 export type SaveState = 'saved' | 'saving' | 'error';
 
@@ -59,6 +63,7 @@ export class AppStore {
   async init(): Promise<void> {
     try {
       this.library = await this.storage.loadLibrary();
+      await this.seedFactory();
     } catch (e) {
       console.warn('Could not load the preset library', e);
     }
@@ -136,6 +141,25 @@ export class AppStore {
       // Not remembered across visits, but still applies now.
     }
     this.emit();
+  }
+
+  /** First run of a synth type (on this device): give it the factory presets, in empty slots. */
+  private async seedFactory(): Promise<void> {
+    let seeded: string[] = [];
+    try {
+      seeded = JSON.parse(localStorage.getItem(FACTORY_KEY) ?? '[]') as string[];
+    } catch {
+      // Unreadable: treat as nothing seeded; seeding never overwrites anyway.
+    }
+    const r = seedLibrary(this.library, new Set(seeded), getDef);
+    if (!r.changed.length) return;
+    for (const type of r.changed) await this.storage.saveBank(type, r.library[type]);
+    this.library = r.library;
+    try {
+      localStorage.setItem(FACTORY_KEY, JSON.stringify([...seeded, ...r.changed]));
+    } catch {
+      // Private mode: seeding again next time is harmless.
+    }
   }
 
   /** Put a preset in (or, with null, empty) a slot of a module type's shared bank. */
