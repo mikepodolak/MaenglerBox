@@ -4,6 +4,7 @@ import { getDef } from '../modules/registry';
 import { modParam } from '../patch/model';
 import { fullParamLabel } from '../patch/params';
 import { applyRecipe } from '../patch/recipes';
+import { Canvas } from './Canvas';
 import { h } from './dom';
 import { closeAllSheets, openSheet } from './sheet';
 
@@ -63,7 +64,7 @@ export function openHelp(store: AppStore, type: string): void {
                     onclick: () => {
                       let self: string | null = null;
                       store.update((p) => {
-                        const r = applyRecipe(p, getDef, idea.recipe!, placer());
+                        const r = applyRecipe(p, getDef, idea.recipe!, placer(), Canvas.cardHeight);
                         self = r.selfId;
                         return r.patch;
                       });

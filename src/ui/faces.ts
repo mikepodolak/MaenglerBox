@@ -1,6 +1,8 @@
 import { EUCLID_COLORS, EUCLID_RINGS, euclidHit, ringSettings, turingLoop } from '../modules/generative';
 import { lfoShape } from '../dsp/lfo';
 import { LIFE_COLS, LIFE_ROWS } from '../modules/life';
+import { MATRIX_SIZE, type MatrixData } from '../modules/matrix';
+import { NOTE_NAMES, SCALES } from '../modules/sequencer';
 import { LIGHT_COLORS, toDb } from '../modules/mixing';
 import type { MarkovData } from '../modules/markov';
 import type { SequencerData } from '../modules/sequencer';
@@ -20,6 +22,8 @@ export function createFace(m: ModuleInstance): Face | null {
   if (m.type === 'euclid') return euclidFace();
   if (m.type === 'markov') return markovFace();
   if (m.type === 'lfo') return lfoFace();
+  if (m.type === 'matrix') return matrixFace();
+  if (m.type === 'conductor') return conductorFace();
   if (m.type === 'meter') return meterFace();
   if (m.type === 'light') return lightFace();
   if (m.type === 'mixer') return mixerFace();
@@ -337,6 +341,79 @@ function curveFace(eq: boolean): Face {
       curve = next;
       c.el.dataset.w = String(c.el.clientWidth);
       draw();
+    },
+  };
+}
+
+/** The routing grid as dials, rows = inputs, columns = outputs; crossings that just fired light up. */
+function matrixFace(): Face {
+  const c = liveCanvas('matrix-face', 1);
+  let data: MatrixData | null = null;
+  let key = '';
+  let lit: number[] = [];
+  let rows: number[] = [];
+  const draw = () => {
+    const k = `${lit.join(',')}|${rows.join(',')}|${c.el.clientWidth}`;
+    if (k === key || !data) return;
+    key = k;
+    const d = c.begin();
+    if (!d) return;
+    const cell = d.w / MATRIX_SIZE;
+    for (const r of rows) {
+      d.g.fillStyle = 'rgba(240, 138, 75, 0.12)';
+      d.g.fillRect(0, r * cell, d.w, cell);
+    }
+    for (let r = 0; r < MATRIX_SIZE; r++) {
+      for (let col = 0; col < MATRIX_SIZE; col++) {
+        const w = data.weights[r][col];
+        const cx = col * cell + cell / 2;
+        const cy = r * cell + cell / 2;
+        d.g.fillStyle = '#2c2f35';
+        d.g.beginPath();
+        d.g.arc(cx, cy, cell * 0.42, 0, Math.PI * 2);
+        d.g.fill();
+        if (!w) continue;
+        d.g.fillStyle = lit.includes(r * MATRIX_SIZE + col) ? '#ffd2b0' : '#f08a4b';
+        d.g.beginPath();
+        d.g.arc(cx, cy, cell * 0.42 * Math.sqrt(w / 100), 0, Math.PI * 2);
+        d.g.fill();
+      }
+    }
+  };
+  return {
+    el: c.el,
+    update(m) {
+      data = m.data as MatrixData;
+      key = '';
+      requestAnimationFrame(draw);
+    },
+    tick(state) {
+      const s = state as { lit?: number[]; rows?: number[] } | undefined;
+      lit = s?.lit ?? [];
+      rows = s?.rows ?? [];
+      draw();
+    },
+  };
+}
+
+/** The key as a big name over a one-octave keyboard with the scale's notes lit. */
+function conductorFace(): Face {
+  const name = h('div', { class: 'conductor-key' });
+  const keys = Array.from({ length: 12 }, (_, i) => h('span', { class: [1, 3, 6, 8, 10].includes(i) ? 'black' : 'white' }));
+  const el = h('div', { class: 'conductor-face face-visual', 'aria-hidden': 'true' }, name, h('div', { class: 'conductor-keys' }, ...keys));
+  return {
+    el,
+    update(m) {
+      const root = Math.round(m.params.root);
+      const scale = SCALES[Math.round(m.params.scale)] ?? SCALES[0];
+      const on = m.params.enabled >= 0.5;
+      name.textContent = on ? `${NOTE_NAMES[root]} ${scale.name}` : 'Off';
+      el.classList.toggle('off', !on);
+      keys.forEach((k, i) => {
+        const deg = (i - root + 12) % 12;
+        k.classList.toggle('in', scale.intervals.includes(deg));
+        k.classList.toggle('root', deg === 0);
+      });
     },
   };
 }

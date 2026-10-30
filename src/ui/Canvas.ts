@@ -1,6 +1,7 @@
 import type { AppStore } from '../app/store';
 import { getDef } from '../modules/registry';
-import { MARKOV_LEVELS, type MarkovData } from '../modules/markov';
+import { MARKOV_LEVELS } from '../modules/markov';
+import { MATRIX_SIZE } from '../modules/matrix';
 import {
   canConnect,
   connect,
@@ -141,7 +142,7 @@ export class Canvas {
   static cardHeight(def: ModuleDef): number {
     const ports = Math.max(def.inputs.length, def.outputs.length) * 28;
     const face = (def.face ?? []).length * 30;
-    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' || def.type === 'markov' ? 190 : def.type === 'random' ? 60 : def.type === 'lfo' ? 80 : def.type === 'meter' ? 90 : def.type === 'light' ? 70 : def.type === 'mixer' || def.type === 'filter' || def.type === 'eq' ? 90 : ['sequencer', 'chance', 'sh'].includes(def.type) ? 40 : 0;
+    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' || def.type === 'markov' ? 190 : def.type === 'random' ? 60 : def.type === 'lfo' ? 80 : def.type === 'matrix' ? 200 : def.type === 'conductor' ? 80 : def.type === 'meter' ? 90 : def.type === 'light' ? 70 : def.type === 'mixer' || def.type === 'filter' || def.type === 'eq' ? 90 : ['sequencer', 'chance', 'sh'].includes(def.type) ? 40 : 0;
     return 60 + ports + face + drawing;
   }
 
@@ -364,8 +365,8 @@ export class Canvas {
     }
 
     // The Markov grid on the card is playable in both modes: tap or drag a dial like in its settings.
-    const markovFace = target.closest<HTMLElement>('.markov-face');
-    if (markovFace && this.startCellGesture(e, markovFace, play)) return;
+    const dialFace = target.closest<HTMLElement>('.markov-face, .matrix-face');
+    if (dialFace && this.startCellGesture(e, dialFace, play)) return;
 
     // Play mode: layout and cables are locked, and a tap on a module opens its settings.
     // Dragging a module pans instead, so a swipe never opens a panel by accident.
@@ -432,9 +433,9 @@ export class Canvas {
   private startCellGesture(e: PointerEvent, face: HTMLElement, play: boolean): boolean {
     const id = face.closest<HTMLElement>('.node')?.dataset.module;
     const m = this.store.patch.modules.find((x) => x.id === id);
-    const data = m?.data as MarkovData | undefined;
+    const data = m?.data as { weights: number[][] } | undefined;
     if (!m || !data) return false;
-    const size = Math.round(m.params.size);
+    const size = m.type === 'matrix' ? MATRIX_SIZE : Math.round(m.params.size);
     const rect = face.getBoundingClientRect();
     const c = Math.floor(((e.clientX - rect.left) / rect.width) * size);
     const r = Math.floor(((e.clientY - rect.top) / rect.height) * size);
@@ -458,11 +459,11 @@ export class Canvas {
   private setCell(id: string, r: number, c: number, w: number): void {
     this.store.update((p) => {
       const m = p.modules.find((x) => x.id === id);
-      const data = m?.data as MarkovData | undefined;
+      const data = m?.data as { weights: number[][] } | undefined;
       if (!data) return p;
       const weights = data.weights.map((row, i) => (i === r ? row.map((v, j) => (j === c ? w : v)) : row));
       return setModuleData(p, getDef, id, { ...data, weights });
-    }, `markov:${id}:${r}:${c}`);
+    }, `dial:${id}:${r}:${c}`);
   }
 
   /** Background: one finger pans, two pinch. */

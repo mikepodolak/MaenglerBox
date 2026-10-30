@@ -1,3 +1,4 @@
+import { createGlobals } from '../modules/conductor';
 import { allWorklets, getModuleType } from '../modules/registry';
 import type { Patch, PresetLibrary } from '../patch/types';
 import { CONVERT_WORKLETS } from './convert';
@@ -58,7 +59,7 @@ export class AudioEngine {
       limiter.connect(this.analyser);
       this.master = limiter;
       this.scheduler = new Scheduler({ now: () => ctx.currentTime });
-      this.runtime = new PatchRuntime({ ctx, scheduler: this.scheduler, master: limiter }, getModuleType);
+      this.runtime = new PatchRuntime({ ctx, scheduler: this.scheduler, master: limiter, globals: createGlobals() }, getModuleType);
       unlockWithSilentBuffer(ctx);
       // Resume inside the gesture first; iOS only honours it synchronously.
       const resumed = ctx.resume();
