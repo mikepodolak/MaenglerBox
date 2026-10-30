@@ -76,7 +76,7 @@ The module menu is grouped into Sequencing, Generative, Sound, Modulation and Ut
 
 Every module has a **?** button that opens its help. The help covers what each jack carries, what the main settings do, and example patches you can add in one tap. Visual modules (Balls, Life, Euclidean, Turing, Markov, Probability, Chance Gate, Sample & Hold) can be resized from their corner in Edit mode. In Play mode they show only their drawing; tap the drawing to show the jacks and controls. The Markov grid stays playable on the card in both modes: tap a dial to step its weight, drag up or down to set it, and long-press it in Play mode to show the jacks.
 
-**Patches and recording.** Patches lets you open, rename and delete patches. **● Rec** records the audio output. When you stop, you can play the recording back, download it, or on iPad share it or save it to Files.
+**Patches and recording.** Patches lets you open, rename and delete patches, and **Export** / **Import** them as `.maengler.json` files, so a patch can move between a computer and an iPad (AirDrop, Files, iCloud, email). An exported patch carries the library presets its synths use; on import they fill empty preset slots and never overwrite yours. **Examples** opens ready-made patches, starting with an Autechre-style starter. **● Rec** records the audio output as a 24-bit stereo WAV. When you stop, you can play the recording back, download it, or on iPad share it or save it to Files.
 
 **Any output into any input.** As in VCV Rack, a gate patched into a CV input becomes a level that is high while the note plays. A CV or audio signal patched into a gate input fires a gate each time it rises past 0.5, for example a bouncing ball's height clocking a Markov chain.
 
@@ -90,7 +90,7 @@ The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or 
 
 ## Mixing and monitoring
 
-- **Mixer**: six channels with level, pan and mute into a stereo pair, with a meter per channel and for L/R on its card.
+- **Mixer**: six channels with level, pan, mute and solo into a stereo pair, with a meter per channel and for L/R on its card. Tap S or M under a meter, in Edit or Play mode, to hear one module on its own.
 - **Meter**: patch any audio through it to see its level (average, peaks, peak hold, clip lamp, dB readout).
 - **Light**: a lamp that flashes for gates and notes, or glows with a signal's level. Both pass through, so it can sit inline.
 - **Filter**: low/high/band pass and notch, 12 or 24 dB, with resonance; the card draws the response and follows any cable on Cutoff.
@@ -103,6 +103,14 @@ The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or 
 - **Matrix**: routes 8 gate inputs to 8 outputs. Each crossing is a chance, tapped or dragged right on the card. In **Pick one** mode each note goes to exactly one output, with the row as odds.
 - **Conductor**: one per patch. Sets the key, scale and overall chance for every voice: notes going into any synth or effect are transposed, moved into the key and thinned, wherever they come from. Patch an LFO onto Chance to make the whole patch breathe.
 - **Preset morphing**: synths with a preset library get a **Morph** section under their presets. Pick From (a slot or the current settings) and To, then move Morph to blend every setting between them, or drop an LFO on Morph to sweep it.
+
+## Drums, pads and textures
+
+- **FM Drum**: a swept sine body, a fast FM modulator and a burst of noise. Kicks, snares, hats, metal and blips; its presets make a whole kit for Probability or step presets to pick from.
+- **Pad**: three drifting, detuned oscillators and a sub through a slow resonant filter.
+- **Texture**: each note becomes a cloud of sine or noise grains scattered around its pitch: glitter, breath, static and drones.
+
+**Factory presets.** The synths (FM Voice, FM Drum, FM Lead, Pluck, Pad, Texture) start with presets in an IDM palette: sub and click kicks, FM snares, hats and metal ticks, cold bells, acid FM bass, detuned pads, granular choirs. They go into empty library slots once per device and never replace your own.
 
 ## Effects
 

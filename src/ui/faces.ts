@@ -3,7 +3,7 @@ import { lfoShape } from '../dsp/lfo';
 import { LIFE_COLS, LIFE_ROWS } from '../modules/life';
 import { MATRIX_SIZE, type MatrixData } from '../modules/matrix';
 import { NOTE_NAMES, SCALES } from '../modules/sequencer';
-import { LIGHT_COLORS, toDb } from '../modules/mixing';
+import { LIGHT_COLORS, MIXER_CHANNELS, toDb } from '../modules/mixing';
 import type { MarkovData } from '../modules/markov';
 import type { SequencerData } from '../modules/sequencer';
 import type { ModuleInstance } from '../patch/types';
@@ -267,9 +267,23 @@ function lightFace(): Face {
 function mixerFace(): Face {
   const c = liveCanvas('mixer-face', 2.6);
   const bars = Array.from({ length: 8 }, () => meterBar());
+  // Mute and solo under each channel's meter, tappable in both modes.
+  const toggles = h('div', { class: 'mixer-toggles' });
+  const btns: HTMLButtonElement[] = [];
+  for (let n = 1; n <= MIXER_CHANNELS; n++) {
+    const col = toggles.appendChild(h('span', {}));
+    for (const [kind, label] of [['solo', 'S'], ['mute', 'M']] as const) {
+      const b = h('button', { class: `face-toggle ${kind}`, 'data-face-toggle': `${kind}${n}`, 'aria-label': `${kind === 'solo' ? 'Solo' : 'Mute'} ${n}`, 'aria-pressed': 'false' }, label);
+      btns.push(b);
+      col.append(b);
+    }
+  }
+  const el = h('div', { class: 'mixer-wrap face-visual' }, c.el, toggles);
   return {
-    el: c.el,
-    update() {},
+    el,
+    update(m) {
+      for (const b of btns) b.setAttribute('aria-pressed', String((m.params[b.dataset.faceToggle!] ?? 0) >= 0.5));
+    },
     tick(state) {
       const s = state as { channels?: (Level & { muted: boolean })[]; master?: Level[] } | undefined;
       const d = c.begin();

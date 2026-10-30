@@ -4,6 +4,11 @@ import { defaultPatch } from '../patch/defaultPatch';
 import { setSlot } from '../patch/presets';
 import type { Patch, Preset, PresetLibrary } from '../patch/types';
 import { debounce, PatchStore } from '../storage/patchStore';
+import { asCopy, exportPatch, mergeLibrary, parsePatchFile, type PatchFile } from '../patch/exchange';
+import { seedLibrary } from '../modules/factory';
+
+/** Module types whose factory presets this device has already been given. */
+const FACTORY_KEY = 'maenglerbox:factory-presets';
 
 export type SaveState = 'saved' | 'saving' | 'error';
 
@@ -58,6 +63,7 @@ export class AppStore {
   async init(): Promise<void> {
     try {
       this.library = await this.storage.loadLibrary();
+      await this.seedFactory();
     } catch (e) {
       console.warn('Could not load the preset library', e);
     }
@@ -137,6 +143,25 @@ export class AppStore {
     this.emit();
   }
 
+  /** First run of a synth type (on this device): give it the factory presets, in empty slots. */
+  private async seedFactory(): Promise<void> {
+    let seeded: string[] = [];
+    try {
+      seeded = JSON.parse(localStorage.getItem(FACTORY_KEY) ?? '[]') as string[];
+    } catch {
+      // Unreadable: treat as nothing seeded; seeding never overwrites anyway.
+    }
+    const r = seedLibrary(this.library, new Set(seeded), getDef);
+    if (!r.changed.length) return;
+    for (const type of r.changed) await this.storage.saveBank(type, r.library[type]);
+    this.library = r.library;
+    try {
+      localStorage.setItem(FACTORY_KEY, JSON.stringify([...seeded, ...r.changed]));
+    } catch {
+      // Private mode: seeding again next time is harmless.
+    }
+  }
+
   /** Put a preset in (or, with null, empty) a slot of a module type's shared bank. */
   setLibrarySlot(type: string, slot: number, preset: Preset | null): void {
     const bank = setSlot(this.library[type], slot, preset);
@@ -170,6 +195,12 @@ export class AppStore {
     void this.save();
   }
 
+  /** Open a fresh copy of a built-in example patch. */
+  openExample(build: () => Patch): void {
+    this.replace(build());
+    void this.save();
+  }
+
   newPatch(): void {
     this.replace(defaultPatch(getDef));
     void this.save();
@@ -195,6 +226,32 @@ export class AppStore {
     const next = (await this.storage.list())[0];
     if (next) await this.open(next.id);
     else this.newPatch();
+  }
+
+  /** The open patch as a file to share, with the presets its synths use. */
+  exportFile(): PatchFile {
+    return exportPatch(this.patch, this.library, getDef);
+  }
+
+  /**
+   * Open a patch file from another device. `copy` keeps the device's own
+   * version of the same patch and stores this one beside it. Its presets fill
+   * empty library slots; returns how many were added and how many slots
+   * already held something else.
+   */
+  async importFile(json: unknown, copy: boolean): Promise<{ added: number; skipped: number }> {
+    const file = parsePatchFile(json, getDef);
+    const merged = mergeLibrary(this.library, file.library);
+    for (const type of merged.changed) await this.storage.saveBank(type, merged.library[type]);
+    this.library = merged.library;
+    this.replace(copy ? asCopy(file.patch) : file.patch);
+    await this.save();
+    return { added: merged.added, skipped: merged.skipped };
+  }
+
+  /** Whether this device already has a patch with this id. */
+  async hasPatch(id: string): Promise<boolean> {
+    return !!(await this.storage.load(id));
   }
 
   /** Switch to a different patch, clearing undo history and selection. */

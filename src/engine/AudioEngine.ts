@@ -1,8 +1,11 @@
 import { createGlobals } from '../modules/conductor';
 import { allWorklets, getModuleType } from '../modules/registry';
+import { WavWriter } from '../dsp/wav';
+import type { RecorderMessage } from '../dsp/recorder.worklet';
+import recorderWorkletUrl from '../dsp/recorder.worklet.ts?worker&url';
 import type { Patch, PresetLibrary } from '../patch/types';
 import { CONVERT_WORKLETS } from './convert';
-import { MOD_RATE_HZ } from './modulation';
+import { MOD_RATE_HZ, silentSink } from './modulation';
 import { PatchRuntime } from './PatchRuntime';
 import { Scheduler } from './Scheduler';
 
@@ -24,8 +27,7 @@ export class AudioEngine {
   private worklets: Promise<void> = Promise.resolve();
   private analyser: AnalyserNode | null = null;
   private master: AudioNode | null = null;
-  private recorder: MediaRecorder | null = null;
-  private recordStart = 0;
+  private recorder: { node: AudioWorkletNode; writer: WavWriter; done: (() => void) | null } | null = null;
   private modTimer: ReturnType<typeof setInterval> | null = null;
   private listeners = new Set<(s: EngineState) => void>();
   state: EngineState = 'off';
@@ -63,7 +65,7 @@ export class AudioEngine {
       unlockWithSilentBuffer(ctx);
       // Resume inside the gesture first; iOS only honours it synchronously.
       const resumed = ctx.resume();
-      this.worklets = Promise.all([...allWorklets(), ...CONVERT_WORKLETS].map((url) => ctx.audioWorklet.addModule(url))).then(() => undefined);
+      this.worklets = Promise.all([...allWorklets(), ...CONVERT_WORKLETS, recorderWorkletUrl].map((url) => ctx.audioWorklet.addModule(url))).then(() => undefined);
       await resumed;
     }
     await this.ctx.resume();
@@ -98,49 +100,47 @@ export class AudioEngine {
   }
 
   get recording(): boolean {
-    return this.recorder?.state === 'recording';
+    return this.recorder !== null;
   }
 
   /** Seconds since recording started, or 0. */
   recordedSeconds(): number {
-    return this.recording && this.ctx ? this.ctx.currentTime - this.recordStart : 0;
+    return this.recorder?.writer.seconds ?? 0;
   }
 
-  /** Start recording what comes out of the speakers. Needs audio running. */
+  /** Start recording what comes out of the speakers, as a WAV file. Needs audio running. */
   startRecording(): boolean {
-    if (!this.ctx || !this.master || this.recording || typeof MediaRecorder === 'undefined') return false;
-    const dest = this.ctx.createMediaStreamDestination();
-    this.master.connect(dest);
-    // Safari records AAC in MP4; Chrome and Firefox record Opus in WebM.
-    const mimeType = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported(t));
-    const rec = new MediaRecorder(dest.stream, mimeType ? { mimeType, audioBitsPerSecond: 256000 } : undefined);
-    const chunks: Blob[] = [];
-    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-    rec.onstop = () => {
-      this.master?.disconnect(dest);
-      this.lastRecording = new Blob(chunks, { type: rec.mimeType || mimeType || 'audio/webm' });
-      this.recordingDone?.(this.lastRecording);
+    if (!this.ctx || !this.master || this.recorder || !this.ready) return false;
+    const node = new AudioWorkletNode(this.ctx, 'mb-recorder', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit' });
+    // Safari only runs nodes that lead to the speakers, so it feeds a silent one.
+    node.connect(silentSink(this.ctx));
+    const writer = new WavWriter(this.ctx.sampleRate);
+    const rec = { node, writer, done: null as (() => void) | null };
+    node.port.onmessage = (e: MessageEvent<{ type: 'audio'; left: Float32Array; right: Float32Array } | { type: 'done' }>) => {
+      if (e.data.type === 'audio') writer.push(e.data.left, e.data.right);
+      else rec.done?.();
     };
-    rec.start(1000);
+    this.master.connect(node);
     this.recorder = rec;
-    this.recordStart = this.ctx.currentTime;
     return true;
   }
 
   lastRecording: Blob | null = null;
-  private recordingDone: ((b: Blob) => void) | null = null;
 
-  /** Stop recording and get the audio file. */
+  /** Stop recording and get the WAV file. */
   stopRecording(): Promise<Blob | null> {
     const rec = this.recorder;
-    if (!rec || rec.state === 'inactive') return Promise.resolve(null);
+    if (!rec) return Promise.resolve(null);
     return new Promise((resolve) => {
-      this.recordingDone = (b) => {
-        this.recordingDone = null;
+      rec.done = () => {
+        this.master?.disconnect(rec.node);
+        rec.node.disconnect();
+        rec.node.port.onmessage = null;
         this.recorder = null;
-        resolve(b);
+        this.lastRecording = rec.writer.blob();
+        resolve(this.lastRecording);
       };
-      rec.stop();
+      rec.node.port.postMessage({ type: 'stop' } satisfies RecorderMessage);
     });
   }
 

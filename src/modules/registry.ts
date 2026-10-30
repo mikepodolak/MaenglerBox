@@ -5,7 +5,7 @@ import { balls } from './balls';
 import { conductor } from './conductor';
 import { fmVoice } from './fmVoice';
 import { comb, delay, flanger, glitch, phaser, reverb, ringMod } from './fx';
-import { fmLead, pluck } from './voices';
+import { fmDrum, fmLead, pad, pluck, texture } from './voices';
 import { chanceGate, euclid, probability, sampleHold, turing } from './generative';
 import { lfo } from './lfo';
 import { life } from './life';
@@ -27,7 +27,7 @@ export function register(t: ModuleType): void {
 for (const t of [
   clock, sequencer, multiTracker, euclid, turing,
   chanceGate, probability, markov, matrix, balls, life,
-  fmVoice, fmLead, pluck, oscillator,
+  fmVoice, fmDrum, fmLead, pad, pluck, texture, oscillator,
   delay, reverb, phaser, flanger, comb, ringMod, glitch,
   envelope, lfo, sampleHold,
   filter, eq,

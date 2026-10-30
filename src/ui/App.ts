@@ -8,6 +8,8 @@ import { h } from './dom';
 import { openHelp, setHelpPlacer } from './help';
 import { Inspector } from './Inspector';
 import { openSheet } from './sheet';
+import { PATCH_FILE_EXT } from '../patch/exchange';
+import { EXAMPLES } from '../modules/examples';
 
 export class App {
   private canvas: Canvas;
@@ -190,6 +192,51 @@ export class App {
     );
   }
 
+  /** Share the open patch as a file, or download it where sharing files isn't possible. */
+  private async exportPatch(): Promise<void> {
+    const name = this.store.patch.name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'patch';
+    const filename = `${name}${PATCH_FILE_EXT}`;
+    const file = new File([JSON.stringify(this.store.exportFile(), null, 1)], filename, { type: 'application/json' });
+    const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+    if (nav.share && nav.canShare?.({ files: [file] })) {
+      try {
+        await nav.share({ files: [file], title: filename });
+        return;
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return;
+      }
+    }
+    const url = URL.createObjectURL(file);
+    const a = h('a', { href: url, download: filename });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  /** Pick a patch file and open it. */
+  private importPatch(done: () => void): void {
+    const input = h('input', { type: 'file', accept: '.json,application/json' });
+    input.addEventListener('change', async () => {
+      const f = input.files?.[0];
+      if (!f) return;
+      try {
+        const json: unknown = JSON.parse(await f.text());
+        const id = (json as { patch?: { id?: unknown }; id?: unknown }).patch?.id ?? (json as { id?: unknown }).id;
+        let copy = false;
+        if (typeof id === 'string' && (await this.store.hasPatch(id))) {
+          copy = !confirm('This device already has this patch. OK replaces it with the file; Cancel keeps both.');
+        }
+        const r = await this.store.importFile(json, copy);
+        done();
+        if (r.skipped) alert(`Imported. ${r.skipped} of its presets weren't added because those slots already hold your own presets.`);
+      } catch (e) {
+        alert(e instanceof SyntaxError ? 'This is not a MaenglerBox patch file.' : (e as Error).message);
+      }
+    });
+    input.click();
+  }
+
   private async openPatches(): Promise<void> {
     const list = h('ul', {});
     const sheet = openSheet(
@@ -200,6 +247,26 @@ export class App {
         'div',
         { class: 'dialog-actions' },
         h('button', { onclick: () => { this.store.newPatch(); sheet.close(); } }, 'New patch'),
+        h('button', { onclick: () => void this.exportPatch() }, 'Export'),
+        h('button', { onclick: () => this.importPatch(() => sheet.close()) }, 'Import'),
+      ),
+      h('p', { class: 'hint' }, 'Export saves the open patch as a file (with the presets its synths use) to share, AirDrop or keep in Files. Import opens one on this device.'),
+      h('h3', {}, 'Examples'),
+      h(
+        'ul',
+        { class: 'examples' },
+        ...EXAMPLES.map((ex) =>
+          h(
+            'li',
+            { class: 'patch-row' },
+            h(
+              'button',
+              { class: 'open-patch', onclick: () => { this.store.openExample(() => ex.build(Canvas.cardHeight)); sheet.close(); } },
+              h('strong', {}, ex.name),
+              h('span', { class: 'hint' }, ex.about),
+            ),
+          ),
+        ),
       ),
     );
     const fill = async () => {
@@ -263,7 +330,7 @@ export class App {
 
   private showRecording(blob: Blob): void {
     const url = URL.createObjectURL(blob);
-    const ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
+    const ext = blob.type.includes('wav') ? 'wav' : blob.type.includes('mp4') ? 'm4a' : 'webm';
     const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '.');
     const filename = `${this.store.patch.name} ${stamp}.${ext}`;
     const file = new File([blob], filename, { type: blob.type });

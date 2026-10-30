@@ -327,10 +327,10 @@ export const HELP: Record<string, ModuleHelp> = {
     ],
   },
   mixer: {
-    about: 'Six channels into a stereo pair. Each channel has a level, a pan and a mute, and its own meter on the card (dimmed when muted). L and R go to the Output. Every setting can take a cable, so an LFO on a pan swings that channel around.',
+    about: 'Six channels into a stereo pair. Each channel has a level, a pan, a mute and a solo, and its own meter on the card (dimmed when silent). Tap S or M under a meter, in either mode: soloing one or more channels silences the rest, so you can hear one module on its own. L and R go to the Output. Every setting can take a cable, so an LFO on a pan swings that channel around.',
     inputs: { in1: 'Channel 1 audio (and so on for 2–6).' },
     outputs: { left: 'Left of the mix.', right: 'Right of the mix.' },
-    settings: { level1: 'Channel volume.', pan1: 'Left to right.', mute1: 'Silence the channel.', master: 'Volume of the whole mix.' },
+    settings: { level1: 'Channel volume.', pan1: 'Left to right.', mute1: 'Silence the channel.', solo1: 'Hear only the soloed channels. Solo wins over mute.', master: 'Volume of the whole mix.' },
     ideas: [
       {
         title: 'Two voices, panned',
@@ -553,6 +553,75 @@ export const HELP: Record<string, ModuleHelp> = {
           modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'glitch', params: { chance: 0.35, bits: 8, downsample: 3 } }, out: OUT },
           cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right', 'clock.out > self.clock'],
         },
+      },
+    ],
+  },
+  drum: {
+    about: 'FM percussion. A sine body starts high and sweeps down to Pitch (Sweep and Sweep time), an FM modulator at Ratio roughens it for a moment (FM amount, FM decay), and a burst of band-passed noise adds snap. Low ratios and long sweeps give kicks and toms; odd high ratios with feedback and noise give hats and metal. Each hit rings out whatever the note length. Its presets make a kit: patch Probability or a sequencer step’s Preset into it and one drum plays them all.',
+    inputs: { gate: 'Hits. With Follow notes up, the note sets the pitch too.' },
+    outputs: { out: 'Audio.' },
+    settings: {
+      pitch: 'Body pitch once the sweep has fallen.',
+      track: 'How much the note moves the pitch: 0 is a fixed drum, 1 plays in tune.',
+      sweep: 'How far above Pitch the hit starts.',
+      sweepTime: 'How fast it falls: short is a click, long is a zap.',
+      ratio: 'Modulator pitch against the body. Whole numbers are tonal, odd ones metallic.',
+      fm: 'How hard the modulator bends the body.',
+      fmDecay: 'How long the FM lasts.',
+      noise: 'Noise level.',
+      noiseTone: 'Centre of the noise band: low is a thud, high is a hiss.',
+      decay: 'Body length.',
+      drive: 'Saturation, from warm to crushed.',
+    },
+    ideas: [
+      {
+        title: 'One-voice kit',
+        text: 'Probability into an FM Drum: each trigger plays one of the first four presets (Sub kick, Click kick, FM snare, Rim), weighted by its bars.',
+        recipe: { modules: { clock: CLOCK, prob: { type: 'random' }, self: { type: 'drum' }, out: OUT }, cables: ['clock.out > prob.trig', 'prob.notes > self.gate', 'self.out > out.left', 'self.out > out.right'] },
+      },
+      { title: 'Hats from Euclid', text: 'Load Closed hat and patch a fast Euclidean ring into it. Put an LFO on Decay for hats that open and close.' },
+    ],
+  },
+  pad: {
+    about: 'Three oscillators, detuned around each note and drifting slowly, plus a sine an octave down, through a resonant low-pass that opens with its own slow envelope. Long attacks and releases make it swell and hang; Shape moves from soft saw to hollow square.',
+    inputs: { gate: 'Notes, six at once.' },
+    outputs: { out: 'Audio.' },
+    settings: {
+      shape: 'Saw (0) to square (1).',
+      detune: 'How far apart the three oscillators are: chorus to sour.',
+      sub: 'Octave-down sine, for weight.',
+      drift: 'Slow, random pitch wander, like old analog.',
+      cutoff: 'Filter cutoff before the envelope.',
+      filterEnv: 'How far the envelope opens the filter.',
+      filterAttack: 'How slowly the filter opens.',
+      attack: 'How slowly the note fades in.',
+      release: 'How long it hangs after the note ends.',
+    },
+    ideas: [
+      {
+        title: 'Slow chords',
+        text: 'A slow sequencer with long steps into a Pad, through a Reverb. Lower the clock rate for slower changes.',
+        recipe: { modules: { clock: CLOCK, seq: { type: 'sequencer' }, self: { type: 'pad' }, rev: { type: 'reverb' }, out: OUT }, cables: ['clock.out > seq.clock', 'seq.out > self.gate', 'self.out > rev.in', 'rev.left > out.left', 'rev.right > out.right'] },
+      },
+    ],
+  },
+  texture: {
+    about: 'Each note becomes a cloud of tiny grains scattered around its pitch. Every grain is a sine or a band of noise; Density sets how many fall each second and Grain how long each lasts. Sparse and pitched it glitters like rain on glass; dense and noisy it breathes and hisses. Hold notes for drones.',
+    inputs: { gate: 'Notes. The cloud lasts as long as the note, then Release.' },
+    outputs: { out: 'Audio.' },
+    settings: {
+      density: 'Grains per second.',
+      grain: 'Length of each grain: short clicks to long tones.',
+      scatter: 'How far grains wander from the note, in semitones.',
+      harmonic: '0 lets grains land anywhere; 1 puts them on octaves and fifths.',
+      noise: 'Sine grains (0) to noise grains (1).',
+      focus: 'How narrow the noise bands are: low is a hiss, high whistles.',
+    },
+    ideas: [
+      {
+        title: 'Drone bed',
+        text: 'A Turing Machine with long gates into a Texture: a shifting cloud under everything. Try the Wind drone or Granular choir presets.',
+        recipe: { modules: { clock: CLOCK, tm: { type: 'turing' }, self: { type: 'texture' }, out: OUT }, cables: ['clock.out > tm.clock', 'tm.notes > self.gate', 'self.out > out.left', 'self.out > out.right'] },
       },
     ],
   },
