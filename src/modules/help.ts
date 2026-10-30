@@ -278,6 +278,92 @@ export const HELP: Record<string, ModuleHelp> = {
       },
     ],
   },
+  meter: {
+    about: 'A level meter. Patch any audio into it, a synth or VCA output or a mixer, to see how loud it is. The solid bar is the average level, the faint bar the peaks, the white line the recent peak, and the lamp on top turns red if the signal clips. Audio passes straight through Thru, so it can sit inline.',
+    inputs: { in: 'Audio to measure.' },
+    outputs: { out: 'The same audio, untouched.' },
+    ideas: [
+      {
+        title: 'Watch a voice',
+        text: 'Put a Meter between the FM Voice and the Output to see each note.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'meter' }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right'],
+        },
+      },
+    ],
+  },
+  light: {
+    about: 'A lamp. It flashes for every gate or note that comes into Gate, and glows with the level of anything in Signal (audio or CV). Both pass straight through, so put it inline to see what a module is sending.',
+    inputs: { gate: 'Gates or notes; each one lights the lamp for its length.', in: 'Audio or CV; the lamp glows with its level.' },
+    outputs: { gateOut: 'The gates, untouched.', out: 'The signal, untouched.' },
+    settings: { color: 'Lamp colour, to tell several apart.' },
+    ideas: [
+      {
+        title: 'See the hits',
+        text: 'Sequencer → Light → FM Voice: the lamp blinks on every step that plays.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, self: { type: 'light' }, fm: FM, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > self.gate', 'self.gateOut > fm.gate', ...toSpeakers],
+        },
+      },
+    ],
+  },
+  mixer: {
+    about: 'Six channels into a stereo pair. Each channel has a level, a pan and a mute, and its own meter on the card (dimmed when muted). L and R go to the Output. Every setting can take a cable, so an LFO on a pan swings that channel around.',
+    inputs: { in1: 'Channel 1 audio (and so on for 2–6).' },
+    outputs: { left: 'Left of the mix.', right: 'Right of the mix.' },
+    settings: { level1: 'Channel volume.', pan1: 'Left to right.', mute1: 'Silence the channel.', master: 'Volume of the whole mix.' },
+    ideas: [
+      {
+        title: 'Two voices, panned',
+        text: 'Two FM Voices into channels 1 and 2, panned apart.',
+        recipe: {
+          modules: {
+            clock: CLOCK,
+            seq: { type: 'sequencer' },
+            fm: FM,
+            fm2: { type: 'fm', params: { algorithm: 5, transpose: 12 } },
+            self: { type: 'mixer', params: { pan1: -0.6, pan2: 0.6 } },
+            out: OUT,
+          },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'seq.out > fm2.gate', 'fm.out > self.in1', 'fm2.out > self.in2', 'self.left > out.left', 'self.right > out.right'],
+        },
+      },
+    ],
+  },
+  filter: {
+    about: 'A resonant filter. Low pass keeps the lows and darkens the sound; high pass thins it; band pass keeps a slice; notch cuts one out. 24 dB is steeper than 12. The card draws the response, and it moves when a cable moves Cutoff.',
+    inputs: { in: 'Audio to filter.' },
+    outputs: { out: 'Filtered audio.' },
+    settings: { type: 'Which part of the sound to keep.', cutoff: 'Where the filter starts working.', resonance: 'A peak at the cutoff; high values whistle.', slope: '12 or 24 dB per octave.' },
+    ideas: [
+      {
+        title: 'Swept filter',
+        text: 'An LFO on Cutoff opens and closes the filter on a voice.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'filter', params: { resonance: 6 } }, lfo: { type: 'lfo', params: { rate: 0.2 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'lfo.out > self.@cutoff', 'self.out > out.left', 'self.out > out.right'],
+        },
+      },
+    ],
+  },
+  eq: {
+    about: 'A three-band EQ: a low shelf, a mid band you can sweep and narrow, and a high shelf, each ±15 dB. The card draws the curve.',
+    inputs: { in: 'Audio to shape.' },
+    outputs: { out: 'Shaped audio.' },
+    settings: { lowGain: 'Boost or cut the lows.', lowFreq: 'Where the lows end.', midGain: 'Boost or cut the mid band.', midFreq: 'Centre of the mid band.', midQ: 'How narrow the mid band is.', highGain: 'Boost or cut the highs.', highFreq: 'Where the highs begin.' },
+    ideas: [
+      {
+        title: 'Telephone voice',
+        text: 'Cut the lows and highs and boost the mids.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'eq', params: { lowGain: -15, midGain: 10, highGain: -15 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right'],
+        },
+      },
+    ],
+  },
   vca: {
     about: 'An amplifier: its gain is Level plus whatever comes into CV. With Level at 0 it is silent until CV opens it.',
     inputs: { in: 'Audio to amplify.', cv: 'Opens the gain. A gate here opens it fully for the length of each note.' },

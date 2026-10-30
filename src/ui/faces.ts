@@ -1,6 +1,7 @@
 import { EUCLID_COLORS, EUCLID_RINGS, euclidHit, ringSettings, turingLoop } from '../modules/generative';
 import { lfoShape } from '../dsp/lfo';
 import { LIFE_COLS, LIFE_ROWS } from '../modules/life';
+import { LIGHT_COLORS, toDb } from '../modules/mixing';
 import type { MarkovData } from '../modules/markov';
 import type { SequencerData } from '../modules/sequencer';
 import type { ModuleInstance } from '../patch/types';
@@ -19,6 +20,10 @@ export function createFace(m: ModuleInstance): Face | null {
   if (m.type === 'euclid') return euclidFace();
   if (m.type === 'markov') return markovFace();
   if (m.type === 'lfo') return lfoFace();
+  if (m.type === 'meter') return meterFace();
+  if (m.type === 'light') return lightFace();
+  if (m.type === 'mixer') return mixerFace();
+  if (m.type === 'filter' || m.type === 'eq') return curveFace(m.type === 'eq');
   if (m.type === 'turing') return turingFace();
   if (m.type === 'random') return probabilityFace();
   if (m.type === 'chance') return chanceFace();
@@ -141,6 +146,196 @@ function lfoFace(): Face {
     tick(state) {
       const s = state as { phase?: number } | undefined;
       phase = s?.phase ?? 0;
+      draw();
+    },
+  };
+}
+
+interface Level {
+  peak: number;
+  rms: number;
+}
+
+/** Meter scale: -48 dB at the bottom to +6 dB at the top. */
+const METER_FLOOR = -48;
+const METER_TOP = 6;
+const meterPos = (x: number) => Math.min(1, Math.max(0, (toDb(x) - METER_FLOOR) / (METER_TOP - METER_FLOOR)));
+
+/**
+ * One meter bar: green to yellow to red, the RMS solid and the peak as a line,
+ * with a peak hold that falls back after a second and a clip lamp at the top.
+ */
+function meterBar() {
+  let hold = 0;
+  let holdAt = 0;
+  let clipAt = -Infinity;
+  return (g: CanvasRenderingContext2D, x: number, y: number, w: number, hgt: number, l: Level, dim = false) => {
+    const now = performance.now();
+    if (l.peak >= hold || now - holdAt > 1000) {
+      hold = l.peak;
+      holdAt = now;
+    }
+    if (l.peak >= 1) clipAt = now;
+    const lamp = Math.min(6, w);
+    const top = y + lamp + 2;
+    const h = hgt - lamp - 2;
+    g.fillStyle = '#1b1d22';
+    g.fillRect(x, top, w, h);
+    const grad = g.createLinearGradient(0, top + h, 0, top);
+    grad.addColorStop(0, '#3fb27f');
+    grad.addColorStop(0.75, '#3fb27f');
+    grad.addColorStop(0.86, '#e6c84f');
+    grad.addColorStop(1, '#e5534b');
+    g.globalAlpha = dim ? 0.35 : 1;
+    const rms = meterPos(l.rms) * h;
+    g.fillStyle = grad;
+    g.fillRect(x, top + h - rms, w, rms);
+    g.globalAlpha = dim ? 0.2 : 0.45;
+    const peak = meterPos(l.peak) * h;
+    g.fillRect(x, top + h - peak, w, peak);
+    g.globalAlpha = 1;
+    const hy = top + h - meterPos(hold) * h;
+    g.fillStyle = '#e8eaed';
+    g.fillRect(x, hy - 1, w, 2);
+    g.fillStyle = now - clipAt < 1500 ? '#e5534b' : '#3a1e1e';
+    g.fillRect(x, y, w, lamp);
+  };
+}
+
+/** A horizontal-ish card with one big bar and a dB readout. */
+function meterFace(): Face {
+  const c = liveCanvas('meter-face', 2.2);
+  const bar = meterBar();
+  let level: Level = { peak: 0, rms: 0 };
+  return {
+    el: c.el,
+    update() {},
+    tick(state) {
+      level = (state as Level | undefined) ?? { peak: 0, rms: 0 };
+      const d = c.begin();
+      if (!d) return;
+      const w = Math.min(36, d.w * 0.3);
+      bar(d.g, 8, 6, w, d.h - 12, level);
+      // dB marks beside the bar.
+      d.g.fillStyle = '#8b9099';
+      d.g.font = '10px system-ui, sans-serif';
+      d.g.textBaseline = 'middle';
+      const top = 6 + Math.min(6, w) + 2;
+      const h = d.h - 12 - Math.min(6, w) - 2;
+      for (const db of [0, -6, -12, -24, -36]) {
+        const y = top + h - ((db - METER_FLOOR) / (METER_TOP - METER_FLOOR)) * h;
+        d.g.fillRect(8 + w + 2, y, 4, 1);
+        d.g.fillText(`${db}`, 8 + w + 9, y);
+      }
+      d.g.fillStyle = '#e8eaed';
+      d.g.font = '600 15px system-ui, sans-serif';
+      d.g.textAlign = 'right';
+      const db = toDb(level.peak);
+      d.g.fillText(db <= -96 ? '−∞' : `${db.toFixed(1)} dB`, d.w - 8, d.h / 2);
+      d.g.textAlign = 'left';
+    },
+  };
+}
+
+const LIGHT_HUES = ['#4ade80', '#facc15', '#f87171', '#60a5fa', '#f1f5f9'];
+
+/** A round lamp that glows with what's coming in. */
+function lightFace(): Face {
+  const el = h('div', { class: 'light-face face-visual', 'aria-hidden': 'true' }, h('span', { class: 'lamp' }));
+  let last = '';
+  return {
+    el,
+    update(m) {
+      el.style.setProperty('--lamp', LIGHT_HUES[Math.round(m.params.color)] ?? LIGHT_HUES[0]);
+      el.title = LIGHT_COLORS[Math.round(m.params.color)] ?? '';
+    },
+    tick(state) {
+      const level = (state as { level?: number } | undefined)?.level ?? 0;
+      const k = level.toFixed(2);
+      if (k === last) return;
+      last = k;
+      el.style.setProperty('--on', k);
+    },
+  };
+}
+
+/** A meter per channel and a stereo pair for the master, like a mixing desk's bridge. */
+function mixerFace(): Face {
+  const c = liveCanvas('mixer-face', 2.6);
+  const bars = Array.from({ length: 8 }, () => meterBar());
+  return {
+    el: c.el,
+    update() {},
+    tick(state) {
+      const s = state as { channels?: (Level & { muted: boolean })[]; master?: Level[] } | undefined;
+      const d = c.begin();
+      if (!d || !s?.channels || !s.master) return;
+      const n = s.channels.length + 2;
+      const gap = 4;
+      const w = (d.w - 16 - gap * (n + 1)) / n;
+      d.g.font = '10px system-ui, sans-serif';
+      d.g.textAlign = 'center';
+      d.g.textBaseline = 'alphabetic';
+      const draw = (i: number, l: Level, label: string, dim = false) => {
+        const x = 8 + gap + i * (w + gap) + (i >= s.channels!.length ? gap * 2 : 0);
+        bars[i](d.g, x, 4, w, d.h - 18, l, dim);
+        d.g.fillStyle = dim ? '#5b6069' : '#8b9099';
+        d.g.fillText(label, x + w / 2, d.h - 3);
+      };
+      s.channels.forEach((ch, i) => draw(i, ch, String(i + 1), ch.muted));
+      draw(s.channels.length, s.master[0], 'L');
+      draw(s.channels.length + 1, s.master[1], 'R');
+    },
+  };
+}
+
+/** A filter's or EQ's response, redrawn when its settings (or a cable on them) move it. */
+function curveFace(eq: boolean): Face {
+  const c = liveCanvas(eq ? 'eq-face' : 'filter-face', 2.4);
+  let curve: Float32Array | null = null;
+  const draw = () => {
+    const d = c.begin();
+    if (!d || !curve) return;
+    // EQ: ±18 dB around the middle. Filter: +18 dB down to -42 dB.
+    const top = 18;
+    const bottom = eq ? -18 : -42;
+    const y = (db: number) => ((top - Math.min(top, Math.max(bottom, db))) / (top - bottom)) * d.h;
+    d.g.strokeStyle = '#2c2f35';
+    d.g.lineWidth = 1;
+    for (const f of [100, 1000, 10000]) {
+      const x = (Math.log(f / 20) / Math.log(1000)) * d.w;
+      d.g.beginPath();
+      d.g.moveTo(x, 0);
+      d.g.lineTo(x, d.h);
+      d.g.stroke();
+    }
+    d.g.beginPath();
+    d.g.moveTo(0, y(0));
+    d.g.lineTo(d.w, y(0));
+    d.g.stroke();
+    d.g.beginPath();
+    for (let i = 0; i < curve.length; i++) {
+      const x = (i / (curve.length - 1)) * d.w;
+      if (i) d.g.lineTo(x, y(curve[i]));
+      else d.g.moveTo(x, y(curve[i]));
+    }
+    d.g.strokeStyle = '#f08a4b';
+    d.g.lineWidth = 2;
+    d.g.stroke();
+    d.g.lineTo(d.w, d.h);
+    d.g.lineTo(0, d.h);
+    d.g.closePath();
+    d.g.fillStyle = 'rgba(240, 138, 75, 0.12)';
+    d.g.fill();
+  };
+  return {
+    el: c.el,
+    update() {},
+    tick(state) {
+      const next = (state as { curve?: Float32Array } | undefined)?.curve ?? null;
+      if (next === curve && c.el.dataset.w === String(c.el.clientWidth)) return;
+      curve = next;
+      c.el.dataset.w = String(c.el.clientWidth);
       draw();
     },
   };
