@@ -9,6 +9,7 @@ import { openHelp, setHelpPlacer } from './help';
 import { Inspector } from './Inspector';
 import { openSheet } from './sheet';
 import { PATCH_FILE_EXT } from '../patch/exchange';
+import { EXAMPLES } from '../modules/examples';
 
 export class App {
   private canvas: Canvas;
@@ -250,6 +251,23 @@ export class App {
         h('button', { onclick: () => this.importPatch(() => sheet.close()) }, 'Import'),
       ),
       h('p', { class: 'hint' }, 'Export saves the open patch as a file (with the presets its synths use) to share, AirDrop or keep in Files. Import opens one on this device.'),
+      h('h3', {}, 'Examples'),
+      h(
+        'ul',
+        { class: 'examples' },
+        ...EXAMPLES.map((ex) =>
+          h(
+            'li',
+            { class: 'patch-row' },
+            h(
+              'button',
+              { class: 'open-patch', onclick: () => { this.store.openExample(() => ex.build(Canvas.cardHeight)); sheet.close(); } },
+              h('strong', {}, ex.name),
+              h('span', { class: 'hint' }, ex.about),
+            ),
+          ),
+        ),
+      ),
     );
     const fill = async () => {
       const rows = await this.store.storage.list();

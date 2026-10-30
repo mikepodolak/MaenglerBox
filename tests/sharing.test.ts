@@ -84,3 +84,21 @@ describe('sharing patches', () => {
     expect(c.name).toBe('Song (copy)');
   });
 });
+
+describe('example patches', () => {
+  it('build, and survive saving and loading intact', async () => {
+    const { EXAMPLES } = await import('../src/modules/examples');
+    const { deserializePatch } = await import('../src/patch/model');
+    for (const ex of EXAMPLES) {
+      const p = ex.build();
+      expect(p.modules.length).toBeGreaterThan(10);
+      const back = deserializePatch(JSON.parse(JSON.stringify(p)), getDef);
+      expect(back.modules.length).toBe(p.modules.length);
+      expect(back.cables.length).toBe(p.cables.length);
+      if (process.env.EXPORT_EXAMPLES) {
+        const fs = await import('node:fs');
+        fs.writeFileSync(`${process.env.EXPORT_EXAMPLES}/${ex.name}.maengler.json`, JSON.stringify(exportPatch(p, {}, getDef), null, 1));
+      }
+    }
+  });
+});

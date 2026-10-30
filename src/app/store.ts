@@ -195,6 +195,12 @@ export class AppStore {
     void this.save();
   }
 
+  /** Open a fresh copy of a built-in example patch. */
+  openExample(build: () => Patch): void {
+    this.replace(build());
+    void this.save();
+  }
+
   newPatch(): void {
     this.replace(defaultPatch(getDef));
     void this.save();
