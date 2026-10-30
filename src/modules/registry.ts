@@ -6,6 +6,7 @@ import { chanceGate, euclid, probability, sampleHold, turing } from './generativ
 import { lfo } from './lfo';
 import { life } from './life';
 import { markov } from './markov';
+import { eq, filter, light, meter, mixer } from './mixing';
 import { multiTracker } from './multiTracker';
 import { sequencer } from './sequencer';
 import type { ModuleType } from './types';
@@ -21,7 +22,8 @@ for (const t of [
   chanceGate, probability, markov, balls, life,
   fmVoice, oscillator,
   envelope, lfo, sampleHold,
-  vca, output,
+  filter, eq,
+  vca, mixer, meter, light, output,
 ]) register(t);
 
 /** Every worklet script any module needs, loaded once when audio starts. */

@@ -88,6 +88,14 @@ In the settings panel, **Modulation** lists each patched setting with an Amount 
 
 The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or synced to a clock (one cycle every so many ticks), a Reset input, and −1..1 or 0..1 range.
 
+## Mixing and monitoring
+
+- **Mixer**: six channels with level, pan and mute into a stereo pair, with a meter per channel and for L/R on its card.
+- **Meter**: patch any audio through it to see its level (average, peaks, peak hold, clip lamp, dB readout).
+- **Light**: a lamp that flashes for gates and notes, or glows with a signal's level. Both pass through, so it can sit inline.
+- **Filter**: low/high/band pass and notch, 12 or 24 dB, with resonance; the card draws the response and follows any cable on Cutoff.
+- **EQ**: low shelf, sweepable mid, high shelf, ±15 dB, with the curve drawn on the card.
+
 ## Roadmap
 
 1. Foundation: app shell, offline support, audio engine, patch model, on-device saving.

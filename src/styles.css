@@ -1821,3 +1821,24 @@ a.button {
 .mod-add select {
   flex: 1;
 }
+
+/* ---- mixing and monitoring ---- */
+
+.light-face {
+  display: grid;
+  place-items: center;
+  padding: 10px 0 12px;
+}
+
+.light-face .lamp {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--lamp, #4ade80) calc(15% + var(--on, 0) * 85%), #202227);
+  box-shadow: 0 0 calc(var(--on, 0) * 26px) color-mix(in srgb, var(--lamp, #4ade80) calc(var(--on, 0) * 100%), transparent);
+  border: 2px solid #2c2f35;
+}
+
+.node.visual.collapsed .light-face {
+  padding: 4px 0 10px;
+}
