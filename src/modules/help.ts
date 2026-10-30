@@ -364,6 +364,118 @@ export const HELP: Record<string, ModuleHelp> = {
       },
     ],
   },
+  delay: {
+    about: 'Tape-style echo. Each repeat gets a little darker and, pushed hard, saturates like tape instead of blowing up. Wow wobbles the time like a worn machine. Patch a clock into Clock and choose a Sync to lock the echoes to the beat.',
+    inputs: { in: 'Audio to echo.', clock: 'A clock to sync the echo time to.' },
+    outputs: { out: 'Processed audio.' },
+    settings: { time: 'Echo time when not synced.', sync: 'Echo every so many clock ticks (needs the Clock input).', feedback: 'How many repeats; near the top it runs away into a wash.', tone: 'Darkens each repeat.', wow: 'Tape wobble.', mix: 'Dry to wet.' },
+    ideas: [
+      {
+        title: 'Dotted echoes',
+        text: 'Sync the echoes to ¾ of a clock for the classic dotted bounce.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'delay', params: { sync: 3, feedback: 0.55 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right', 'clock.out > self.clock'],
+        },
+      },
+    ],
+  },
+  reverb: {
+    about: 'A stereo room. Size sets how long the tail lasts, Damping how quickly it darkens, Pre-delay the gap before it starts. Out is mono; L and R give the stereo tail with the dry sound in the middle.',
+    inputs: { in: 'Audio to process.' },
+    outputs: { out: 'Mono mix.', left: 'Left of the stereo mix.', right: 'Right of the stereo mix.' },
+    settings: { size: 'Tail length.', damping: 'How quickly the tail darkens.', predelay: 'Gap before the room answers.', mix: 'Dry to wet.' },
+    ideas: [
+      {
+        title: 'Big space',
+        text: 'A long, dark tail behind a voice, in stereo.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'reverb', params: { size: 6, damping: 0.7, mix: 0.45 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.left > out.left', 'self.right > out.right'],
+        },
+      },
+    ],
+  },
+  phaser: {
+    about: 'Sweeping notches that swirl through the sound, from a chain of all-pass filters moved by a built-in LFO. More stages make a deeper swirl.',
+    inputs: { in: 'Audio to process.' },
+    outputs: { out: 'Processed audio.' },
+    settings: { rate: 'Sweep speed.', depth: 'Sweep width.', center: 'Where the sweep sits.', resonance: 'Sharper notches.', stages: '4, 6 or 8 stages.', mix: '50% is the classic phaser.' },
+    ideas: [
+      {
+        title: 'Slow swirl',
+        text: 'A slow phaser on a voice.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'phaser', params: { rate: 0.15, depth: 0.9 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right'],
+        },
+      },
+    ],
+  },
+  flanger: {
+    about: 'A tiny delay swept back and forth and fed back on itself: the jet-plane sweep. Negative feedback sounds hollow, positive metallic.',
+    inputs: { in: 'Audio to process.' },
+    outputs: { out: 'Processed audio.' },
+    settings: { rate: 'Sweep speed.', depth: 'Sweep width.', delay: 'Shortest delay; lower is brighter.', feedback: 'Strength and colour of the sweep.', mix: 'Dry to wet.' },
+    ideas: [
+      {
+        title: 'Jet',
+        text: 'A strong flange on a voice.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'flanger', params: { feedback: 0.85, depth: 0.9 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right'],
+        },
+      },
+    ],
+  },
+  comb: {
+    about: 'Makes anything ring at a pitch: a delay tuned to the note and fed back. Patch notes into Notes and the ringing follows the melody, a resonator. Feed it drums or clicks for Karplus-style plucks.',
+    inputs: { in: 'Audio to make ring.', notes: 'Notes retune the comb to each pitch.' },
+    outputs: { out: 'Processed audio.' },
+    settings: { freq: 'Pitch it rings at (until notes arrive).', feedback: 'How long it rings; negative rings an octave lower and hollower.', damp: 'Darkens the ringing.', mix: 'Dry to wet.' },
+    ideas: [
+      {
+        title: 'Resonator',
+        text: 'The sequencer’s notes tune the comb, so the voice gets a ringing body that follows the melody.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'comb', params: { feedback: 0.92 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right', 'seq.out > self.notes'],
+        },
+      },
+    ],
+  },
+  ringmod: {
+    about: 'Multiplies the sound by a carrier wave: metallic, bell-like, robotic. Low Freq values make tremolo. Turn Own carrier off and patch any audio into Carrier to multiply two sounds together.',
+    inputs: { in: 'Audio to modulate.', carrier: 'Any audio to multiply by instead.' },
+    outputs: { out: 'Processed audio.' },
+    settings: { freq: 'Carrier pitch.', wave: 'Carrier shape.', osc: 'Use the built-in carrier, or only the Carrier input.', mix: 'Dry to wet.' },
+    ideas: [
+      {
+        title: 'Bells',
+        text: 'A ring modulator at an odd frequency turns a voice into bells.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'ringmod', params: { freq: 733, mix: 0.9 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right'],
+        },
+      },
+    ],
+  },
+  glitch: {
+    about: 'Stutters, reverses and crushes. On each clock tick it may (by Chance) grab the slice it just heard and repeat it, sometimes backwards. Bits and Downsample crush the sound all the time. It needs a clock in Clock to stutter.',
+    inputs: { in: 'Audio to glitch.', clock: 'Each tick may start a stutter.' },
+    outputs: { out: 'Processed audio.' },
+    settings: { chance: 'How often a tick starts a stutter.', slice: 'How long a slice is, in clock ticks.', repeats: 'How many times a slice repeats.', reverse: 'How often a stutter plays backwards.', bits: 'Fewer bits, grittier (16 is clean).', downsample: 'Lower sample rate, more aliasing (1 is clean).', mix: 'Dry to wet.' },
+    ideas: [
+      {
+        title: 'Broken beat',
+        text: 'Stutters on the clock, with a little crushing.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: FM, self: { type: 'glitch', params: { chance: 0.35, bits: 8, downsample: 3 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', 'fm.out > self.in', 'self.out > out.left', 'self.out > out.right', 'clock.out > self.clock'],
+        },
+      },
+    ],
+  },
   vca: {
     about: 'An amplifier: its gain is Level plus whatever comes into CV. With Level at 0 it is silent until CV opens it.',
     inputs: { in: 'Audio to amplify.', cv: 'Opens the gain. A gate here opens it fully for the length of each note.' },

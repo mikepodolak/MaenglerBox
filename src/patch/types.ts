@@ -36,7 +36,7 @@ export interface ModuleDataDef<T = unknown> {
   normalize(raw: unknown): T;
 }
 
-export const MODULE_CATEGORIES = ['Sequencing', 'Generative', 'Sound', 'Modulation', 'Utility'] as const;
+export const MODULE_CATEGORIES = ['Sequencing', 'Generative', 'Sound', 'Effects', 'Modulation', 'Utility'] as const;
 export type ModuleCategory = (typeof MODULE_CATEGORIES)[number];
 
 /** Static description of a module type: what it's called and what it exposes. */

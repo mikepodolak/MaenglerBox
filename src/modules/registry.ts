@@ -2,6 +2,7 @@ import type { ModuleDef } from '../patch/types';
 import { clock, envelope, oscillator, output, vca } from './core';
 import { balls } from './balls';
 import { fmVoice } from './fmVoice';
+import { comb, delay, flanger, glitch, phaser, reverb, ringMod } from './fx';
 import { chanceGate, euclid, probability, sampleHold, turing } from './generative';
 import { lfo } from './lfo';
 import { life } from './life';
@@ -21,6 +22,7 @@ for (const t of [
   clock, sequencer, multiTracker, euclid, turing,
   chanceGate, probability, markov, balls, life,
   fmVoice, oscillator,
+  delay, reverb, phaser, flanger, comb, ringMod, glitch,
   envelope, lfo, sampleHold,
   filter, eq,
   vca, mixer, meter, light, output,

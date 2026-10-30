@@ -96,6 +96,18 @@ The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or 
 - **Filter**: low/high/band pass and notch, 12 or 24 dB, with resonance; the card draws the response and follows any cable on Cutoff.
 - **EQ**: low shelf, sweepable mid, high shelf, ±15 dB, with the curve drawn on the card.
 
+## Effects
+
+- **Tape Delay**: darkening, saturating repeats with wow and flutter; patch a clock in to sync the echo time.
+- **Reverb**: stereo room from small to huge, with damping and pre-delay (mono Out, plus L and R).
+- **Phaser**: 4, 6 or 8 swept all-pass stages.
+- **Flanger**: a tiny swept delay with positive or negative feedback.
+- **Comb**: rings at a pitch; patch notes in and it follows the melody (a resonator, or Karplus-style plucks from drums or clicks).
+- **Ring Mod**: multiplies by a built-in carrier or any audio patched into Carrier.
+- **Glitch**: on each clock tick it may stutter the slice it just heard, sometimes backwards, with bit and sample-rate crushing.
+
+The flanger and comb run on a per-sample delay line in a worklet, because Web Audio's own delay can't feed back faster than 128 samples.
+
 ## Roadmap
 
 1. Foundation: app shell, offline support, audio engine, patch model, on-device saving.
