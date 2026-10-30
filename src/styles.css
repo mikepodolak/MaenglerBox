@@ -1921,3 +1921,38 @@ a.button {
 .morph-body.off {
   opacity: 0.45;
 }
+
+/* Mixer: S and M under each channel's meter. */
+.mixer-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.mixer-toggles {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  padding: 0 12px 6px;
+}
+.mixer-toggles span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.face-toggle {
+  min-height: 24px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: var(--panel-2, #23262c);
+  color: #8b9099;
+  border: 1px solid var(--line);
+}
+.face-toggle.solo[aria-pressed='true'] {
+  background: #e3c14b;
+  color: #1b1d21;
+}
+.face-toggle.mute[aria-pressed='true'] {
+  background: #d4564e;
+  color: #fff;
+}

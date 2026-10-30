@@ -364,6 +364,17 @@ export class Canvas {
       return;
     }
 
+    // On/off buttons on a card (a mixer's mute and solo) work in both modes.
+    const toggle = target.closest<HTMLElement>('[data-face-toggle]');
+    if (toggle) {
+      const id = toggle.closest<HTMLElement>('.node')!.dataset.module!;
+      const pid = toggle.dataset.faceToggle!;
+      const m = this.store.patch.modules.find((x) => x.id === id);
+      if (m) this.store.update((p) => setParam(p, getDef, id, pid, (m.params[pid] ?? 0) >= 0.5 ? 0 : 1));
+      e.preventDefault();
+      return;
+    }
+
     // The Markov grid on the card is playable in both modes: tap or drag a dial like in its settings.
     const dialFace = target.closest<HTMLElement>('.markov-face, .matrix-face');
     if (dialFace && this.startCellGesture(e, dialFace, play)) return;

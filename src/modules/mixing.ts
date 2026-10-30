@@ -134,18 +134,29 @@ const channelParams = (n: number): ParamDef[] => [
   { id: `level${n}`, label: `Level ${n}`, min: 0, max: 1, default: 0.8, step: 0.01 },
   { id: `pan${n}`, label: `Pan ${n}`, min: -1, max: 1, default: 0, step: 0.01 },
   { id: `mute${n}`, label: `Mute ${n}`, min: 0, max: 1, default: 0, step: 1, options: ['Playing', 'Muted'] },
+  { id: `solo${n}`, label: `Solo ${n}`, min: 0, max: 1, default: 0, step: 1, options: ['Off', 'Solo'] },
 ];
+
+/**
+ * Whether a channel is heard: not muted, and either nothing is soloed or it
+ * is. Solo wins over mute, as on a desk, so a soloed channel always plays.
+ */
+export function channelOn(p: Record<string, number>, n: number): boolean {
+  const solo = (i: number) => (p[`solo${i}`] ?? 0) >= 0.5;
+  if (CH.some(solo)) return solo(n);
+  return (p[`mute${n}`] ?? 0) < 0.5;
+}
 
 const CH = Array.from({ length: MIXER_CHANNELS }, (_, i) => i + 1);
 
-/** Six channels with level, pan and mute into a stereo pair, with a meter per channel. */
+/** Six channels with level, pan, mute and solo into a stereo pair, with a meter per channel. */
 export const mixer: ModuleType = {
   def: {
     type: 'mixer',
     label: 'Mixer',
     category: 'Utility',
     visual: true,
-    description: 'Six channels with level, pan and mute, summed to a stereo pair. Each channel has its own meter.',
+    description: 'Six channels with level, pan, mute and solo, summed to a stereo pair. Each channel has its own meter, and M and S buttons on the card.',
     inputs: CH.map((n) => ({ id: `in${n}`, label: `${n}`, kind: 'audio' as const })),
     outputs: [
       { id: 'left', label: 'L', kind: 'audio' },
@@ -168,7 +179,7 @@ export const mixer: ModuleType = {
       const fader = ctx.createGain();
       const pan = ctx.createStereoPanner();
       input.connect(fader).connect(pan).connect(master);
-      const gain = () => (p[`mute${n}`] >= 0.5 ? 0 : p[`level${n}`]);
+      const gain = () => (channelOn(p, n) ? p[`level${n}`] : 0);
       fader.gain.value = gain();
       pan.pan.value = p[`pan${n}`];
       return { input, fader, pan, gain, tap: levelTap(ctx, fader) };
@@ -184,10 +195,12 @@ export const mixer: ModuleType = {
         const c = channels[n - 1];
         if (!c) return;
         if (id.startsWith('pan')) smoothSet(c.pan.pan, v, ctx);
+        // A solo changes what every other channel does.
+        else if (id.startsWith('solo')) for (const x of channels) smoothSet(x.fader.gain, x.gain(), ctx);
         else smoothSet(c.fader.gain, c.gain(), ctx);
       },
       getState: () => ({
-        channels: channels.map((c, i) => ({ ...c.tap.read(), muted: p[`mute${i + 1}`] >= 0.5 })),
+        channels: channels.map((c, i) => ({ ...c.tap.read(), muted: !channelOn(p, i + 1) })),
         master: masterTaps.map((t) => t.read()),
       }),
       dispose() {

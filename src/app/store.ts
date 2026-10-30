@@ -4,6 +4,7 @@ import { defaultPatch } from '../patch/defaultPatch';
 import { setSlot } from '../patch/presets';
 import type { Patch, Preset, PresetLibrary } from '../patch/types';
 import { debounce, PatchStore } from '../storage/patchStore';
+import { asCopy, exportPatch, mergeLibrary, parsePatchFile, type PatchFile } from '../patch/exchange';
 
 export type SaveState = 'saved' | 'saving' | 'error';
 
@@ -195,6 +196,32 @@ export class AppStore {
     const next = (await this.storage.list())[0];
     if (next) await this.open(next.id);
     else this.newPatch();
+  }
+
+  /** The open patch as a file to share, with the presets its synths use. */
+  exportFile(): PatchFile {
+    return exportPatch(this.patch, this.library, getDef);
+  }
+
+  /**
+   * Open a patch file from another device. `copy` keeps the device's own
+   * version of the same patch and stores this one beside it. Its presets fill
+   * empty library slots; returns how many were added and how many slots
+   * already held something else.
+   */
+  async importFile(json: unknown, copy: boolean): Promise<{ added: number; skipped: number }> {
+    const file = parsePatchFile(json, getDef);
+    const merged = mergeLibrary(this.library, file.library);
+    for (const type of merged.changed) await this.storage.saveBank(type, merged.library[type]);
+    this.library = merged.library;
+    this.replace(copy ? asCopy(file.patch) : file.patch);
+    await this.save();
+    return { added: merged.added, skipped: merged.skipped };
+  }
+
+  /** Whether this device already has a patch with this id. */
+  async hasPatch(id: string): Promise<boolean> {
+    return !!(await this.storage.load(id));
   }
 
   /** Switch to a different patch, clearing undo history and selection. */
