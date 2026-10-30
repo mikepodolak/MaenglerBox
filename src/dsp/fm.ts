@@ -70,7 +70,7 @@ const TWO_PI = Math.PI * 2;
 const MOD_DEPTH = TWO_PI * 1.5;
 const ENV_FLOOR = 1e-4;
 
-const enum Stage {
+export const enum Stage {
   Idle,
   Attack,
   Decay,
@@ -78,7 +78,15 @@ const enum Stage {
   Release,
 }
 
-class Envelope {
+/** The four stage times and sustain level an envelope reads. */
+export interface EnvParams {
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+}
+
+export class Envelope {
   stage = Stage.Idle;
   value = 0;
 
@@ -90,7 +98,7 @@ class Envelope {
     if (this.stage !== Stage.Idle) this.stage = Stage.Release;
   }
 
-  next(p: OpParams, sr: number): number {
+  next(p: EnvParams, sr: number): number {
     switch (this.stage) {
       case Stage.Attack:
         this.value += 1 / Math.max(1, p.attack * sr);

@@ -2,6 +2,7 @@ import type { ModuleDef } from '../patch/types';
 import { clock, envelope, oscillator, output, vca } from './core';
 import { balls } from './balls';
 import { fmVoice } from './fmVoice';
+import { fmLead, pluck } from './voices';
 import { chanceGate, euclid, probability, sampleHold, turing } from './generative';
 import { lfo } from './lfo';
 import { life } from './life';
@@ -20,7 +21,7 @@ export function register(t: ModuleType): void {
 for (const t of [
   clock, sequencer, multiTracker, euclid, turing,
   chanceGate, probability, markov, balls, life,
-  fmVoice, oscillator,
+  fmVoice, fmLead, pluck, oscillator,
   envelope, lfo, sampleHold,
   filter, eq,
   vca, mixer, meter, light, output,

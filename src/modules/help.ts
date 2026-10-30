@@ -364,6 +364,55 @@ export const HELP: Record<string, ModuleHelp> = {
       },
     ],
   },
+  lead: {
+    about: 'A two-operator FM voice through a resonant low-pass filter, after the Nord Lead 2’s FM: a modulator (with its own envelope and feedback) bends a sine carrier, then the filter, opened by its own decaying envelope, shapes it. Good for punchy basses, plucky leads and bells. Plays notes, presets and parameter locks like the FM Voice.',
+    inputs: { gate: 'Notes to play (6 at once).' },
+    outputs: { out: 'Audio.' },
+    settings: {
+      ratio: 'Modulator pitch against the note; whole numbers are harmonic, halves add a sub.',
+      index: 'How much FM: from a sine to a buzz.',
+      feedback: 'The modulator modulating itself: grit and noise.',
+      modDecay: 'How fast the FM fades after the attack; short makes a pluck, long a growl.',
+      cutoff: 'Filter brightness.',
+      resonance: 'A peak at the cutoff.',
+      filterEnv: 'How far each note opens the filter (negative closes it).',
+      filterDecay: 'How fast the filter closes again.',
+      attack: 'Amp attack.',
+      release: 'Amp release.',
+    },
+    ideas: [
+      {
+        title: 'FM bass',
+        text: 'Low notes with a quick filter snap.',
+        recipe: {
+          modules: { clock: CLOCK, seq: { type: 'sequencer' }, fm: { type: 'lead', params: { transpose: -24, ratio: 1, index: 0.6, cutoff: 400, filterEnv: 3, filterDecay: 0.15, resonance: 4 } }, out: OUT },
+          cables: ['clock.out > seq.clock', 'seq.out > fm.gate', ...toSpeakers],
+        },
+      },
+    ],
+  },
+  pluck: {
+    about: 'A plucked string by the Karplus-Strong method: a burst of noise rings round a delay tuned to the note and fades as it goes. Guitars, harps, kalimbas, and stranger clangs with low Brightness or short Decay.',
+    inputs: { gate: 'Notes to play (6 at once).' },
+    outputs: { out: 'Audio.' },
+    settings: {
+      decay: 'How long the string rings.',
+      brightness: 'How bright the ringing stays; low is muted and woody.',
+      pluck: 'How bright the pluck itself is (a pick against a thumb).',
+      position: 'Where the string is plucked; near the middle sounds hollow.',
+      release: 'How quickly it stops once the note ends.',
+    },
+    ideas: [
+      {
+        title: 'Harp from a Markov chain',
+        text: 'A Markov Chain playing a Pluck: a wandering harp line.',
+        recipe: {
+          modules: { clock: CLOCK, self: { type: 'pluck', params: { decay: 3 } }, mk: { type: 'markov' }, out: OUT },
+          cables: ['clock.out > mk.clock', 'mk.notes > self.gate', 'self.out > out.left', 'self.out > out.right'],
+        },
+      },
+    ],
+  },
   vca: {
     about: 'An amplifier: its gain is Level plus whatever comes into CV. With Level at 0 it is silent until CV opens it.',
     inputs: { in: 'Audio to amplify.', cv: 'Opens the gain. A gate here opens it fully for the length of each note.' },
