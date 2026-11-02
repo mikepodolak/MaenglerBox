@@ -5,6 +5,8 @@ import { PadVoice, type PadParams } from '../src/dsp/pad';
 import { PluckVoice, type PluckParams } from '../src/dsp/pluck';
 import { PolySynth, type PolyVoice } from '../src/dsp/poly';
 import { TextureVoice, type TextureParams } from '../src/dsp/texture';
+import { ModalVoice } from '../src/dsp/modal';
+import { SupersawVoice } from '../src/dsp/supersaw';
 import { factoryPresets, seedBank, seedLibrary } from '../src/modules/factory';
 import { getDef } from '../src/modules/registry';
 
@@ -37,6 +39,8 @@ const cases: [string, () => PolyVoice<never>, number][] = [
   ['texture', () => new TextureVoice(rng()) as PolyVoice<never>, 4],
   ['lead', () => new LeadVoice() as PolyVoice<never>, 3],
   ['pluck', () => new PluckVoice(SR, rng()) as PolyVoice<never>, 3],
+  ['modal', () => new ModalVoice(rng()) as PolyVoice<never>, 4],
+  ['supersaw', () => new SupersawVoice(rng()) as PolyVoice<never>, 3],
 ];
 
 describe('factory presets', () => {
@@ -54,7 +58,7 @@ describe('factory presets', () => {
   }
 
   it('cover every setting, so loading one replaces the whole sound', () => {
-    for (const type of ['fm', 'drum', 'pad', 'texture', 'lead', 'pluck']) {
+    for (const type of ['fm', 'drum', 'pad', 'texture', 'lead', 'pluck', 'modal', 'supersaw']) {
       const def = getDef(type)!;
       for (const p of factoryPresets(def)) {
         for (const param of def.params) if (param.id !== 'morph') expect(p.params[param.id], `${type} ${p.name} ${param.id}`).toBeTypeOf('number');

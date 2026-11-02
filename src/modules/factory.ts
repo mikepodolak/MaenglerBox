@@ -70,6 +70,23 @@ const FACTORY: Record<string, Sketch[]> = {
     ['Distant bells', { density: 6, grain: 0.4, scatter: 24, harmonic: 1, noise: 0, attack: 0.5, release: 4 }],
     ['Wind drone', { density: 120, grain: 0.3, scatter: 2, harmonic: 0, noise: 1, focus: 20, attack: 3, release: 5 }],
   ],
+  modal: [
+    ['Marimba', { body: 2, decay: 0.9, material: 0.25, stretch: -0.15, position: 0.25, bend: 0, exciter: 1, hardness: 0.45, noise: 0.02, damp: 2 }],
+    ['Skin tom', { body: 1, decay: 0.5, material: 0.3, position: 0.2, bend: 7, bendTime: 0.09, exciter: 0, hardness: 0.6, noise: 0.08, transpose: -12 }],
+    ['Steel plate', { body: 3, decay: 2.5, material: 0.9, stretch: 0.2, position: 0.35, bend: 0.5, exciter: 0, hardness: 0.9, noise: 0.1 }],
+    ['Temple bell', { body: 4, decay: 4, material: 0.85, position: 0.4, bend: 0, exciter: 1, hardness: 0.5, noise: 0 }],
+    ['Glass tick', { body: 7, decay: 0.25, material: 0.95, stretch: 0.3, position: 0.15, bend: 0, exciter: 0, hardness: 1, noise: 0.15, transpose: 24 }],
+    ['Brushed chime', { body: 5, decay: 3, material: 0.8, position: 0.6, bend: 0, exciter: 3, hardness: 0.7, noise: 0.3, transpose: 12 }],
+    ['Wood block', { body: 6, decay: 0.12, material: 0.05, position: 0.3, bend: 1, bendTime: 0.02, exciter: 0, hardness: 0.85, noise: 0.05, transpose: 12 }],
+    ['Kalimba tine', { body: 8, decay: 1.4, material: 0.55, stretch: 0.08, position: 0.1, bend: 0.2, bendTime: 0.02, exciter: 1, hardness: 0.7, noise: 0 }],
+  ],
+  supersaw: [
+    ['Rave stab', { voices: 7, detune: 0.45, blend: 0.65, sub: 0.2, cutoff: 1800, resonance: 1.5, filterEnv: 2.5, filterDecay: 0.25, attack: 0.002, decay: 0.3, sustain: 0.2, release: 0.25 }],
+    ['Wide chord', { voices: 9, detune: 0.35, blend: 0.6, sub: 0.15, drift: 4, cutoff: 3000, resonance: 0.8, filterEnv: 0.8, filterDecay: 1.2, attack: 0.05, decay: 1.5, sustain: 0.8, release: 1.2 }],
+    ['Drone wall', { voices: 9, detune: 0.7, blend: 0.8, sub: 0.4, drift: 10, cutoff: 900, resonance: 1.2, filterEnv: 1.5, filterDecay: 4, attack: 2, decay: 3, sustain: 0.9, release: 4 }],
+    ['Thin lead', { voices: 3, detune: 0.2, blend: 0.4, sub: 0, drift: 2, cutoff: 5000, resonance: 2, filterEnv: 1, filterDecay: 0.4, attack: 0.005, decay: 0.5, sustain: 0.7, release: 0.3 }],
+    ['Sour pluck', { voices: 5, detune: 0.85, blend: 0.7, sub: 0.3, drift: 6, cutoff: 700, resonance: 4, filterEnv: 3.5, filterDecay: 0.15, attack: 0.001, decay: 0.25, sustain: 0, release: 0.2 }],
+  ],
 };
 
 /** The factory presets of a module type, complete (every setting given) so loading one fully replaces the sound. */

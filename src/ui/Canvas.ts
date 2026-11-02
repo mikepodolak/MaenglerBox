@@ -2,6 +2,8 @@ import type { AppStore } from '../app/store';
 import { getDef } from '../modules/registry';
 import { MARKOV_LEVELS } from '../modules/markov';
 import { MATRIX_SIZE } from '../modules/matrix';
+import { LANE_COUNT, LANE_STEPS, paintLane, type LanesData } from '../modules/chassis';
+import { DRUM_PAD_SHARE } from './faces';
 import {
   canConnect,
   connect,
@@ -68,7 +70,9 @@ type Gesture =
   | { kind: 'resize'; id: string; startX: number; origW: number; moved: boolean }
   /** Play mode: a tap on a visual module's drawing shows or hides its jacks and controls. */
   | { kind: 'reveal'; id: string; startX: number; startY: number; moved: boolean }
-  | { kind: 'cell'; id: string; r: number; c: number; w0: number; startX: number; startY: number; moved: boolean; done: boolean; timer: number };
+  | { kind: 'cell'; id: string; r: number; c: number; w0: number; startX: number; startY: number; moved: boolean; done: boolean; timer: number }
+  /** Painting on a card: a Lanes lane, or the Drum Map's X/Y pad. */
+  | { kind: 'paint'; id: string; rect: DOMRect; lane: number; startX: number; startY: number; moved: boolean; done: boolean; timer: number };
 
 /**
  * The patching canvas. Modules are DOM cards on a pannable, zoomable world;
@@ -142,7 +146,7 @@ export class Canvas {
   static cardHeight(def: ModuleDef): number {
     const ports = Math.max(def.inputs.length, def.outputs.length) * 28;
     const face = (def.face ?? []).length * 30;
-    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' || def.type === 'markov' ? 190 : def.type === 'random' ? 60 : def.type === 'lfo' ? 80 : def.type === 'matrix' ? 200 : def.type === 'conductor' ? 80 : def.type === 'meter' ? 90 : def.type === 'light' ? 70 : def.type === 'mixer' ? 150 : def.type === 'filter' || def.type === 'eq' ? 90 : ['sequencer', 'chance', 'sh'].includes(def.type) ? 40 : 0;
+    const drawing = def.type === 'balls' ? 110 : def.type === 'life' ? 140 : def.type === 'euclid' || def.type === 'turing' || def.type === 'markov' ? 190 : def.type === 'random' ? 60 : def.type === 'lfo' ? 80 : def.type === 'matrix' ? 200 : def.type === 'conductor' ? 80 : def.type === 'meter' ? 90 : def.type === 'light' ? 70 : def.type === 'mixer' ? 150 : def.type === 'filter' || def.type === 'eq' ? 90 : def.type === 'drummap' ? 180 : def.type === 'lanes' ? 140 : def.type === 'follower' ? 40 : ['sequencer', 'chance', 'sh'].includes(def.type) ? 40 : 0;
     return 60 + ports + face + drawing;
   }
 
@@ -379,6 +383,10 @@ export class Canvas {
     const dialFace = target.closest<HTMLElement>('.markov-face, .matrix-face');
     if (dialFace && this.startCellGesture(e, dialFace, play)) return;
 
+    // Lanes and the Drum Map pad are painted with a finger in both modes, like the Markov grid.
+    const paintFace = target.closest<HTMLElement>('.lanes-face, .drummap-face');
+    if (paintFace && this.startPaintGesture(e, paintFace, play)) return;
+
     // Play mode: layout and cables are locked, and a tap on a module opens its settings.
     // Dragging a module pans instead, so a swipe never opens a panel by accident.
     if (play) {
@@ -467,6 +475,58 @@ export class Canvas {
     return true;
   }
 
+  /** Where the finger is on a painted face, 0..1 across and down. */
+  private facePoint(r: DOMRect, e: PointerEvent): { u: number; v: number } {
+    return { u: clamp((e.clientX - r.left) / r.width, 0, 0.9999), v: clamp((e.clientY - r.top) / r.height, 0, 0.9999) };
+  }
+
+  private startPaintGesture(e: PointerEvent, face: HTMLElement, play: boolean): boolean {
+    const id = face.closest<HTMLElement>('.node')?.dataset.module;
+    const m = this.store.patch.modules.find((x) => x.id === id);
+    if (!m) return false;
+    // The card may redraw while painting, so keep the face's position from the start.
+    const rect = face.getBoundingClientRect();
+    const { v } = this.facePoint(rect, e);
+    // On the Drum Map only the pad paints; the lane strip below it behaves like the rest of the card.
+    if (m.type === 'drummap' && v > DRUM_PAD_SHARE) return false;
+    e.preventDefault();
+    this.el.setPointerCapture(e.pointerId);
+    const lane = m.type === 'lanes' ? Math.floor(v * LANE_COUNT) : 0;
+    const g = { kind: 'paint' as const, id: m.id, rect, lane, startX: e.clientX, startY: e.clientY, moved: false, done: false, timer: 0 };
+    if (play) {
+      g.timer = window.setTimeout(() => {
+        if (g.moved || this.gesture !== g) return;
+        g.done = true;
+        if (this.revealed.has(g.id)) this.revealed.delete(g.id);
+        else this.revealed.add(g.id);
+        this.render();
+      }, LONG_PRESS_MS);
+    }
+    this.gesture = g;
+    this.paintAt(g, e);
+    return true;
+  }
+
+  private paintAt(g: Extract<Gesture, { kind: 'paint' }>, e: PointerEvent): void {
+    const m = this.store.patch.modules.find((x) => x.id === g.id);
+    if (!m) return;
+    const { u, v } = this.facePoint(g.rect, e);
+    if (m.type === 'drummap') {
+      const y = 1 - Math.min(1, v / DRUM_PAD_SHARE);
+      this.store.update((p) => setParam(setParam(p, getDef, g.id, 'x', Math.round(u * 100) / 100), getDef, g.id, 'y', Math.round(y * 100) / 100), `paint:${g.id}`);
+      return;
+    }
+    // Each lane is a strip; height within the strip is the value, and the finger stays on the lane it started in.
+    const rowTop = g.lane / LANE_COUNT;
+    const value = 1 - clamp((v - rowTop) * LANE_COUNT, 0, 1);
+    const step = Math.floor(u * LANE_STEPS);
+    this.store.update((p) => {
+      const mod = p.modules.find((x) => x.id === g.id);
+      if (!mod?.data) return p;
+      return setModuleData(p, getDef, g.id, paintLane(mod.data as LanesData, g.lane, step, Math.round(value * 100) / 100));
+    }, `paint:${g.id}`);
+  }
+
   private setCell(id: string, r: number, c: number, w: number): void {
     this.store.update((p) => {
       const m = p.modules.find((x) => x.id === id);
@@ -514,6 +574,10 @@ export class Canvas {
       this.drawCables();
     } else if (g.kind === 'reveal') {
       if (Math.hypot(e.clientX - g.startX, e.clientY - g.startY) > TAP_SLOP) g.moved = true;
+    } else if (g.kind === 'paint') {
+      if (g.done) return;
+      if (Math.hypot(e.clientX - g.startX, e.clientY - g.startY) > TAP_SLOP) g.moved = true;
+      this.paintAt(g, e);
     } else if (g.kind === 'cell') {
       if (g.done) return;
       const dy = g.startY - e.clientY;
@@ -569,6 +633,8 @@ export class Canvas {
       if (this.revealed.has(g.id)) this.revealed.delete(g.id);
       else this.revealed.add(g.id);
       this.render();
+    } else if (g.kind === 'paint') {
+      clearTimeout(g.timer);
     } else if (g.kind === 'cell') {
       clearTimeout(g.timer);
       // A tap steps through off, low, mid, high.

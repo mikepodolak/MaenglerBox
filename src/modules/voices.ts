@@ -2,6 +2,8 @@ import { defaultDrumParams, type DrumParams } from '../dsp/drum';
 import { defaultLeadParams, type LeadParams } from '../dsp/lead';
 import { defaultPadParams, type PadParams } from '../dsp/pad';
 import { defaultTextureParams, type TextureParams } from '../dsp/texture';
+import { BODIES, defaultModalParams, EXCITERS, type ModalParams } from '../dsp/modal';
+import { defaultSupersawParams, MAX_SAWS, type SupersawParams } from '../dsp/supersaw';
 import { defaultPluckParams, type PluckParams } from '../dsp/pluck';
 import type { VoiceMessage } from '../dsp/voices.worklet';
 import voicesWorkletUrl from '../dsp/voices.worklet.ts?worker&url';
@@ -259,4 +261,82 @@ export const texture = polyVoice<TextureParams>(
   },
   'mb-texture',
   pick(texture0),
+);
+
+const modal0 = defaultModalParams();
+
+/** Inspired by Chassis' frappe: a strike on a resonant object, built as a bank of tuned modes. */
+export const modal = polyVoice<ModalParams>(
+  {
+    type: 'modal',
+    label: 'Modal Perc',
+    category: 'Sound',
+    presets: true,
+    description: 'A strike on a resonant object: skins, bars, plates, bells, glass. Notes set the pitch. Metallic hits, marimbas, gongs, wood.',
+    inputs: [{ id: 'gate', label: 'Hits', kind: 'gate' }],
+    outputs: [{ id: 'out', label: 'Out', kind: 'audio' }],
+    params: [
+      { id: 'body', label: 'Body', min: 0, max: BODIES.length - 1, default: modal0.body, step: 1, options: BODIES.map((b) => b.name) },
+      { id: 'decay', label: 'Decay', min: 0.02, max: 6, default: modal0.decay, unit: 's', curve: 'exp' },
+      { id: 'material', label: 'Material', min: 0, max: 1, default: modal0.material, step: 0.01 },
+      { id: 'stretch', label: 'Stretch', min: -1, max: 1, default: modal0.stretch, step: 0.01 },
+      { id: 'position', label: 'Position', min: 0, max: 1, default: modal0.position, step: 0.01 },
+      { id: 'bend', label: 'Bend', min: 0, max: 24, default: modal0.bend, step: 0.1, unit: 'st' },
+      { id: 'bendTime', label: 'Bend time', min: 0.005, max: 1, default: modal0.bendTime, unit: 's', curve: 'exp' },
+      { id: 'exciter', label: 'Exciter', min: 0, max: EXCITERS.length - 1, default: modal0.exciter, step: 1, options: EXCITERS },
+      { id: 'hardness', label: 'Hardness', min: 0, max: 1, default: modal0.hardness, step: 0.01 },
+      { id: 'noise', label: 'Noise', min: 0, max: 1, default: modal0.noise, step: 0.01 },
+      { id: 'damp', label: 'Damp', min: 0.01, max: 6, default: modal0.damp, unit: 's', curve: 'exp' },
+      { id: 'level', label: 'Level', min: 0, max: 1, default: modal0.level, step: 0.01 },
+      TRANSPOSE,
+    ],
+    face: ['body', 'decay', 'material', 'position'],
+    groups: [
+      { label: 'Object', params: ['body', 'decay', 'material', 'stretch'] },
+      { label: 'Strike', params: ['exciter', 'hardness', 'noise', 'position', 'bend', 'bendTime'] },
+      { label: 'Output', params: ['damp', 'level', 'transpose'] },
+    ],
+  },
+  'mb-modal',
+  pick(modal0),
+);
+
+const saw0 = defaultSupersawParams();
+
+/** Inspired by Chassis' scie: a stack of detuned saws per note. */
+export const supersaw = polyVoice<SupersawParams>(
+  {
+    type: 'supersaw',
+    label: 'Supersaw',
+    category: 'Sound',
+    presets: true,
+    description: 'Up to nine detuned saws per note with a sub and a low-pass. Huge chords, rave stabs, trance leads, detuned drones.',
+    inputs: [{ id: 'gate', label: 'Notes', kind: 'gate' }],
+    outputs: [{ id: 'out', label: 'Out', kind: 'audio' }],
+    params: [
+      { id: 'voices', label: 'Saws', min: 1, max: MAX_SAWS, default: saw0.voices, step: 1 },
+      { id: 'detune', label: 'Detune', min: 0, max: 1, default: saw0.detune, step: 0.005 },
+      { id: 'blend', label: 'Blend', min: 0, max: 1, default: saw0.blend, step: 0.01 },
+      { id: 'sub', label: 'Sub', min: 0, max: 1, default: saw0.sub, step: 0.01 },
+      { id: 'drift', label: 'Drift', min: 0, max: 20, default: saw0.drift, step: 0.5, unit: 'ct' },
+      { id: 'cutoff', label: 'Cutoff', min: 40, max: 16000, default: saw0.cutoff, unit: 'Hz', curve: 'exp' },
+      { id: 'resonance', label: 'Resonance', min: 0.5, max: 12, default: saw0.resonance, curve: 'exp' },
+      { id: 'filterEnv', label: 'Env amount', min: -3, max: 5, default: saw0.filterEnv, step: 0.01, unit: 'oct' },
+      { id: 'filterDecay', label: 'Env decay', min: 0.005, max: 6, default: saw0.filterDecay, unit: 's', curve: 'exp' },
+      { id: 'attack', label: 'Attack', min: 0.001, max: 8, default: saw0.attack, unit: 's', curve: 'exp' },
+      { id: 'decay', label: 'Decay', min: 0.01, max: 8, default: saw0.decay, unit: 's', curve: 'exp' },
+      { id: 'sustain', label: 'Sustain', min: 0, max: 1, default: saw0.sustain, step: 0.01 },
+      { id: 'release', label: 'Release', min: 0.01, max: 8, default: saw0.release, unit: 's', curve: 'exp' },
+      { id: 'level', label: 'Level', min: 0, max: 1, default: saw0.level, step: 0.01 },
+      TRANSPOSE,
+    ],
+    face: ['voices', 'detune', 'blend', 'cutoff'],
+    groups: [
+      { label: 'Saws', params: ['voices', 'detune', 'blend', 'sub', 'drift'] },
+      { label: 'Filter', params: ['cutoff', 'resonance', 'filterEnv', 'filterDecay'] },
+      { label: 'Amp', params: ['attack', 'decay', 'sustain', 'release', 'level', 'transpose'] },
+    ],
+  },
+  'mb-supersaw',
+  pick(saw0),
 );

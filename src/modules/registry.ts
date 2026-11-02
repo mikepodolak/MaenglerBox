@@ -3,9 +3,10 @@ import type { ModuleDef } from '../patch/types';
 import { clock, envelope, oscillator, output, vca } from './core';
 import { balls } from './balls';
 import { conductor } from './conductor';
+import { drumMap, follower, lanes, logic, math, shifter } from './chassis';
 import { fmVoice } from './fmVoice';
 import { comb, delay, flanger, glitch, phaser, reverb, ringMod } from './fx';
-import { fmDrum, fmLead, pad, pluck, texture } from './voices';
+import { fmDrum, fmLead, modal, pad, pluck, supersaw, texture } from './voices';
 import { chanceGate, euclid, probability, sampleHold, turing } from './generative';
 import { lfo } from './lfo';
 import { life } from './life';
@@ -25,13 +26,13 @@ export function register(t: ModuleType): void {
 }
 
 for (const t of [
-  clock, sequencer, multiTracker, euclid, turing,
+  clock, sequencer, multiTracker, euclid, turing, drumMap,
   chanceGate, probability, markov, matrix, balls, life,
-  fmVoice, fmDrum, fmLead, pad, pluck, texture, oscillator,
-  delay, reverb, phaser, flanger, comb, ringMod, glitch,
-  envelope, lfo, sampleHold,
+  fmVoice, fmDrum, fmLead, pad, pluck, texture, modal, supersaw, oscillator,
+  delay, reverb, phaser, flanger, comb, ringMod, glitch, shifter,
+  envelope, lfo, sampleHold, lanes, follower, math,
   filter, eq,
-  vca, mixer, meter, light, conductor, output,
+  vca, mixer, meter, light, logic, conductor, output,
 ]) register(t);
 
 /** Every worklet script any module needs, loaded once when audio starts. */
