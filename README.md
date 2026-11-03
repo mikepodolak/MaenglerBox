@@ -74,6 +74,19 @@ The module menu is grouped into Sequencing, Generative, Sound, Modulation and Ut
 - **Turing Machine**: a looping random melody that mutates by a chosen amount. It is drawn as a lit pad grid, one column per step.
 - **Sample & Hold**: random or drunk-walk values, sent out as CV and as notes.
 
+## Chassis-inspired modules
+
+Modules modelled on ideas from the Chassis manual (see [docs/chassis.md](docs/chassis.md)); the DSP and patterns are our own.
+
+- **Drum Map** (Sequencing): four drum lanes read from a map of patterns. Drag the dot on the card: left to right is straight to broken, bottom to top is sparse to busy. Density per lane, Chaos, Lock, Fills and Swing. Kit notes plays all four lanes through one FM Drum's presets.
+- **Lanes** (Modulation): four lanes you paint with a finger on the card. Each has its own length, so they drift against each other; each sends its value out as CV, stepped or gliding.
+- **Follower** (Modulation): follows how loud a sound is. Level out as CV, a Gate when it crosses the threshold, audio passes through.
+- **Math** (Modulation): two signals in, one out: add, subtract, multiply, min, max, compare, rectify, fold, slew, steps.
+- **Logic** (Utility): combine two gate rhythms with AND, OR, XOR, A not B, Toggle or Divide; what doesn't pass goes out Else.
+- **Modal Perc** (Sound): a strike on a skin, bar, plate, bell, chime, box, glass or tine, built from tuned resonators.
+- **Supersaw** (Sound): up to nine detuned saws per note, with blend, sub, drift and a filter.
+- **Freq Shifter** (Effects): moves every frequency by the same number of hertz, for swirling phase or bells and metal.
+
 Every module has a **?** button that opens its help. The help covers what each jack carries, what the main settings do, and example patches you can add in one tap. Visual modules (Balls, Life, Euclidean, Turing, Markov, Probability, Chance Gate, Sample & Hold) can be resized from their corner in Edit mode. In Play mode they show only their drawing; tap the drawing to show the jacks and controls. The Markov grid stays playable on the card in both modes: tap a dial to step its weight, drag up or down to set it, and long-press it in Play mode to show the jacks.
 
 **Patches and recording.** Patches lets you open, rename and delete patches, and **Export** / **Import** them as `.maengler.json` files, so a patch can move between a computer and an iPad (AirDrop, Files, iCloud, email). An exported patch carries the library presets its synths use; on import they fill empty preset slots and never overwrite yours. **Examples** opens ready-made patches, starting with an Autechre-style starter. **● Rec** records the audio output as a 24-bit stereo WAV. When you stop, you can play the recording back, download it, or on iPad share it or save it to Files.

@@ -625,6 +625,149 @@ export const HELP: Record<string, ModuleHelp> = {
       },
     ],
   },
+  drummap: {
+    about: 'Four drum lanes (kick, snare, hat, aux) read from a map of patterns, inspired by the grille module in Chassis. Drag the dot on the card: left to right goes from straight to broken beats, bottom to top from sparse to busy, and everywhere in between is a blend. Density decides how faint a step can be and still play, so each lane thins out or fills in on its own. Chaos wobbles steps in and out; Lock decides whether that wobble repeats every bar or changes.',
+    inputs: { clock: 'One step per gate; 32 steps make a bar.', reset: 'Back to step 1.', fill: 'Fills the next eight steps.' },
+    outputs: {
+      kick: 'Kick hits.',
+      snare: 'Snare hits.',
+      hat: 'Hat hits.',
+      aux: 'The fourth lane: percussion, rims, clicks.',
+      notes: 'All four lanes as notes with preset numbers 1–4, so one FM Drum with a kit loaded plays everything.',
+    },
+    settings: {
+      x: 'Straight (left) to broken (right). Patch a slow LFO here to wander.',
+      y: 'Sparse (bottom) to busy (top).',
+      dens1: 'How many kick steps play.',
+      chaos: 'How much steps wobble in and out.',
+      lock: 'At 1 the wobble repeats every bar; at 0 it is new every bar.',
+      fillEvery: 'Busier last half-bar every so many bars.',
+      fillAmount: 'How much busier fills get.',
+      swing: 'Pushes every second step late.',
+    },
+    ideas: [
+      {
+        title: 'One-drum kit',
+        text: 'Kit notes into an FM Drum: the kick, snare, hat and aux lanes play its presets 1–4 (Sub kick, Click kick, FM snare, Rim).',
+        recipe: { modules: { clock: CLOCK, self: { type: 'drummap' }, drum: { type: 'drum' }, out: OUT }, cables: ['clock.out > self.clock', 'self.notes > drum.gate', 'drum.out > out.left', 'drum.out > out.right'] },
+      },
+      {
+        title: 'Wandering beat',
+        text: 'A slow LFO on X drifts the beat between straight and broken. Drag the LFO Out onto the X slider in Edit mode.',
+        recipe: { modules: { clock: CLOCK, self: { type: 'drummap' }, lfo: { type: 'lfo', params: { rate: 0.05 } }, drum: { type: 'drum' }, out: OUT }, cables: ['clock.out > self.clock', 'lfo.out > self.@x', 'self.notes > drum.gate', 'drum.out > out.left', 'drum.out > out.right'] },
+      },
+    ],
+  },
+  logic: {
+    about: 'Combines two gate rhythms, inspired by the atelier operators in Chassis. AND plays when both inputs are high at once, OR when either is, XOR when only one is, A not B when A plays and B does not. Toggle lets every other A through; Divide lets every Nth A through, and B restarts the count. Every gate that does not pass goes out Else, so nothing is lost.',
+    inputs: { a: 'First rhythm.', b: 'Second rhythm, or a reset for Toggle and Divide.' },
+    outputs: { out: 'Gates that pass.', else: 'Gates that do not.' },
+    settings: { op: 'Which rule.', divide: 'For Divide: pass one A in this many.' },
+    ideas: [
+      {
+        title: 'Two Euclids, one groove',
+        text: 'Two Euclidean rings into A and B with XOR: hits where only one ring plays. Else carries the rest to a second drum.',
+        recipe: { modules: { clock: CLOCK, eu: { type: 'euclid' }, self: { type: 'logic', params: { op: 2 } }, drum: { type: 'drum' }, out: OUT }, cables: ['clock.out > eu.clock', 'eu.out > self.a', 'eu.out2 > self.b', 'self.out > drum.gate', 'drum.out > out.left', 'drum.out > out.right'] },
+      },
+    ],
+  },
+  math: {
+    about: 'Two signals in, one out, inspired by the atelier operators in Chassis. Add, subtract or multiply two LFOs into a new shape; Min and Max pick the lower or higher; A > B gives 1 or 0; |A| rectifies, Fold A folds it back on itself (Amount sets how hard), Slew A smooths jumps (Amount is the time), Steps A quantises to a few levels. Gains go negative to invert.',
+    inputs: { a: 'First signal.', b: 'Second signal.' },
+    outputs: { out: 'The result, plus Offset.' },
+    settings: { op: 'Which operator.', gainA: 'Scales A first; negative inverts.', gainB: 'Scales B first.', offset: 'Added at the end.', amount: 'Fold depth, slew time or step count, for the operators that use it.' },
+    ideas: [
+      {
+        title: 'Two LFOs, one odd shape',
+        text: 'Multiply a slow and a fast LFO for a wobble that swells and fades, then drag Out onto a filter cutoff.',
+        recipe: { modules: { a: { type: 'lfo', params: { rate: 0.1 } }, b: { type: 'lfo', params: { rate: 3 } }, self: { type: 'math', params: { op: 2 } } }, cables: ['a.out > self.a', 'b.out > self.b'] },
+      },
+    ],
+  },
+  lanes: {
+    about: 'Four lanes of values you paint with a finger, inspired by the quatre macros in Chassis. A clock moves a playhead through each lane, and each lane has its own length, so a 16, a 12 and a 7 drift against each other into long, slowly repeating movement. Each lane sends its value out as CV: drag an output onto any setting to move it. Glide smooths the steps into slopes.',
+    inputs: { clock: 'Moves the playheads.', reset: 'Back to the start of every lane.' },
+    outputs: { out1: 'Lane 1 value, 0 to 1.', out2: 'Lane 2.', out3: 'Lane 3.', out4: 'Lane 4.' },
+    settings: { len1: 'Steps in lane 1 before it loops.', rate: 'Steps per clock: ×2 is two, ÷4 is one every four.', smooth: 'Glide between steps: 0 jumps, 1 slides all the way.' },
+    ideas: [
+      {
+        title: 'Painted filter',
+        text: 'Lane 1 into a Filter cutoff over a sequenced FM Voice. Paint the lane and hear the filter follow.',
+        recipe: { modules: { clock: CLOCK, seq: { type: 'sequencer' }, self: { type: 'lanes' }, fm: FM, flt: { type: 'filter' }, out: OUT }, cables: ['clock.out > seq.clock', 'clock.out > self.clock', 'seq.out > fm.gate', 'fm.out > flt.in', 'self.out1 > flt.@cutoff', 'flt.out > out.left', 'flt.out > out.right'] },
+      },
+    ],
+  },
+  follower: {
+    about: 'Follows how loud a sound is, inspired by the sillage module in Chassis. Level comes out as CV: patch it onto a setting so one sound shapes another, like a kick opening a pad’s filter or ducking its level. Gate fires each time the level rises past the threshold, so a sound can trigger another voice. Audio passes through unchanged.',
+    inputs: { in: 'The sound to follow.' },
+    outputs: { env: 'Its level as CV.', gate: 'A gate each time the level crosses the threshold.', thru: 'The same audio, unchanged.' },
+    settings: { attack: 'How fast it rises.', release: 'How fast it falls.', gain: 'Scales the level up or down.', threshold: 'The level where Gate fires (the white mark on the card).' },
+    ideas: [
+      {
+        title: 'Drums trigger a bell',
+        text: 'Follow an FM Drum and play a Modal Perc from its Gate, so every loud hit rings a bell.',
+        recipe: { modules: { clock: CLOCK, prob: { type: 'random' }, drum: { type: 'drum' }, self: { type: 'follower' }, bell: { type: 'modal', params: { body: 4 } }, out: OUT }, cables: ['clock.out > prob.trig', 'prob.notes > drum.gate', 'drum.out > self.in', 'self.thru > out.left', 'self.gate > bell.gate', 'bell.out > out.right'] },
+      },
+    ],
+  },
+  shifter: {
+    about: 'Moves every frequency by the same number of hertz, inspired by the biais module in Chassis. Unlike pitch shifting, the gaps between partials stay the same, so harmonic sounds turn inharmonic: a few hertz gives slow swirling phase, tens give a seasick shimmer, hundreds turn notes into bells and metal. Feedback sends the result round again for spirals.',
+    inputs: { in: 'Audio to shift.' },
+    outputs: { out: 'Shifted audio.' },
+    settings: { shift: 'Hertz to move by; negative moves down.', fine: 'Small extra shift, for slow phasing.', side: 'Up, down, or both together (ring-mod-like).', feedback: 'Sends the output back in.', mix: 'Dry to shifted.' },
+    ideas: [
+      {
+        title: 'Metal pluck',
+        text: 'A Pluck through the shifter at about 150 Hz: strings become clanging metal.',
+        recipe: { modules: { clock: CLOCK, seq: { type: 'sequencer' }, pl: { type: 'pluck' }, self: { type: 'shifter', params: { shift: 150 } }, out: OUT }, cables: ['clock.out > seq.clock', 'seq.out > pl.gate', 'pl.out > self.in', 'self.out > out.left', 'self.out > out.right'] },
+      },
+    ],
+  },
+  modal: {
+    about: 'A strike on a resonant object, inspired by the frappe module in Chassis and built as a bank of tuned resonators, one per vibration mode. Body picks the object (skin, tom, bar, plate, bell, chime, box, glass, tine); notes set its pitch. Material decides how long high modes ring (wood is soft, metal and glass are hard), Stretch spreads the modes apart, and Position moves where it is struck. Exciter and Hardness shape the strike itself.',
+    inputs: { gate: 'Hits; the note sets the pitch.' },
+    outputs: { out: 'Audio.' },
+    settings: {
+      body: 'The object being struck.',
+      decay: 'How long the lowest mode rings.',
+      material: 'Soft (high modes die quickly) to hard (they ring on).',
+      stretch: 'Squeezes (−) or spreads (+) the modes: stiffer, more bell-like as it rises.',
+      position: 'Edge to centre. The centre hollows out some modes.',
+      bend: 'Starts sharp and falls, like a tom.',
+      exciter: 'Tap, soft Mallet, Noise burst, or Brush.',
+      hardness: 'Soft mallet to hard stick: brighter and shorter contact.',
+      damp: 'How fast it is choked once the note ends.',
+    },
+    ideas: [
+      {
+        title: 'Marimba melody',
+        text: 'A Turing Machine into Modal Perc with the Marimba preset, through a Reverb.',
+        recipe: { modules: { clock: CLOCK, tm: { type: 'turing' }, self: { type: 'modal', params: { body: 2, exciter: 1, decay: 0.9, material: 0.25 } }, rev: { type: 'reverb' }, out: OUT }, cables: ['clock.out > tm.clock', 'tm.notes > self.gate', 'self.out > rev.in', 'rev.left > out.left', 'rev.right > out.right'] },
+      },
+      { title: 'Percussion map', text: 'Drum Map Aux into a Modal Perc on Glass or Box for clicks and knocks around the beat.' },
+    ],
+  },
+  supersaw: {
+    about: 'A stack of up to nine saws per note, spread in pitch, inspired by the scie module in Chassis. Detune sets how far apart they are, Blend balances the centre saw against the outer ones, and Sub adds weight an octave down. A low-pass with its own envelope tames or bites.',
+    inputs: { gate: 'Notes, six at once.' },
+    outputs: { out: 'Audio.' },
+    settings: {
+      voices: 'Saws per note. One is a plain saw.',
+      detune: 'Spread: subtle chorus at the bottom, sour at the top.',
+      blend: 'Centre saw (0) to outer saws (1).',
+      sub: 'A rounded saw an octave down.',
+      drift: 'Each saw wanders slowly in pitch.',
+      cutoff: 'Filter cutoff before its envelope.',
+      filterEnv: 'How far each note opens the filter.',
+    },
+    ideas: [
+      {
+        title: 'Rave stabs',
+        text: 'A sparse sequencer into Supersaw (Rave stab preset) and a Tape Delay synced to the clock.',
+        recipe: { modules: { clock: CLOCK, seq: { type: 'sequencer' }, self: { type: 'supersaw' }, dl: { type: 'delay' }, out: OUT }, cables: ['clock.out > seq.clock', 'clock.out > dl.clock', 'seq.out > self.gate', 'self.out > dl.in', 'dl.out > out.left', 'dl.out > out.right'] },
+      },
+    ],
+  },
   vca: {
     about: 'An amplifier: its gain is Level plus whatever comes into CV. With Level at 0 it is silent until CV opens it.',
     inputs: { in: 'Audio to amplify.', cv: 'Opens the gain. A gate here opens it fully for the length of each note.' },
