@@ -28,6 +28,8 @@ export function defaultParams(def: ModuleDef): Record<string, number> {
 export function addModule(patch: Patch, def: ModuleDef, x = 0, y = 0, id = newId(def.type)): [Patch, ModuleInstance] {
   const mod: ModuleInstance = { id, type: def.type, x, y, params: defaultParams(def) };
   if (def.data) mod.data = def.data.create();
+  const starters = def.presetScope === 'patch' ? def.starterPresets?.() : undefined;
+  if (starters?.some(Boolean)) mod.presets = starters;
   return [touch(patch, { modules: [...patch.modules, mod] }), mod];
 }
 

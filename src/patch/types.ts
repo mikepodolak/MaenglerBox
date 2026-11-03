@@ -71,6 +71,11 @@ export interface ModuleDef {
    * (output, VCA, clock) leave it off to keep their panel short.
    */
   presets?: boolean;
+  /**
+   * Starting slots for a module whose presets live in the patch (a
+   * sequencer's pattern bank): each new module of this type gets them.
+   */
+  starterPresets?: () => (Preset | null)[];
 }
 
 /** Shared preset banks, one per module type. */

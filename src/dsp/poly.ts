@@ -33,6 +33,8 @@ export class PolySynth<P> {
     public params: P,
     makeVoice: () => PolyVoice<P>,
     polyphony = 6,
+    /** Replay a note on the voice already sounding it. Off for drums, where one note can be many sounds. */
+    private readonly reuseNote = true,
   ) {
     this.voices = Array.from({ length: polyphony }, makeVoice);
   }
@@ -72,7 +74,7 @@ export class PolySynth<P> {
 
   private pick(note: number): PolyVoice<P> {
     return (
-      this.voices.find((v) => v.active && v.note === note) ??
+      (this.reuseNote ? this.voices.find((v) => v.active && v.note === note) : undefined) ??
       this.voices.find((v) => !v.active) ??
       this.voices.reduce((a, b) => (b.startedAt < a.startedAt ? b : a))
     );

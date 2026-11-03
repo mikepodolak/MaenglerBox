@@ -64,6 +64,11 @@ export const HELP: Record<string, ModuleHelp> = {
       fill: 'Turns on steps whose condition is Fill.',
     },
     ideas: [
+      {
+        title: 'A whole kit from one sequencer',
+        text: 'A new sequencer’s Patterns start with starter patterns. Load a “Kit” one: each step calls up an FM Drum preset (kick, snare, hats, metal), so one sequencer into one FM Drum plays a full broken beat. Load Acid bass or Minor drift into a second sequencer for a line.',
+        recipe: { modules: { clock: CLOCK, self: { type: 'sequencer' }, drum: { type: 'drum' }, out: OUT }, cables: ['clock.out > self.clock', 'self.out > drum.gate', 'drum.out > out.left', 'drum.out > out.right'] },
+      },
       { title: 'Probability groove', text: 'Leave the downbeats at 100% and set the in-between steps to 30–60%. The pattern changes every bar but keeps its shape.' },
       { title: 'Euclid resets it', text: 'Patch a Euclidean Hits output into Reset so the melody restarts on an uneven cycle.' },
     ],
@@ -72,7 +77,9 @@ export const HELP: Record<string, ModuleHelp> = {
     about: 'Eight step sequencers on one clock, M8 style. Each track has its own Notes output, so each can play its own synth. Edit a track in the grid or the tracker view; mute tracks from the overview.',
     inputs: { clock: 'Advances all tracks.', reset: 'Back to step 1 on every track.' },
     outputs: { out1: 'Track 1’s notes (likewise Track 2–8).' },
-    ideas: [{ title: 'A kit', text: 'Patch tracks 1–3 to three FM Voices, each with a different preset: kick, snare, hat.' }],
+    ideas: [
+      { title: 'IDM band', text: 'Load the IDM band pattern. Tracks 1–4 are kick, snare, hats and metal: patch each to an FM Drum and load the matching preset (Sub kick, FM snare, Closed hat, Metal tick). Track 5 is an acid bass line for an FM Lead, track 6 sparse bells for an FM Voice.' },
+    ],
   },
   euclid: {
     about: 'Four Euclidean rhythms on one clock, drawn as rings. Each ring spreads a number of hits as evenly as possible over its own loop of steps: 3 hits in 8 steps is the tresillo, 5 in 8 the cinquillo. Give rings different lengths and they drift against each other (polymeter); the coloured hands show where each ring is.',

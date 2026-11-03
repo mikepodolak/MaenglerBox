@@ -15,6 +15,7 @@ import { matrix } from './matrix';
 import { eq, filter, light, meter, mixer } from './mixing';
 import { multiTracker } from './multiTracker';
 import { sequencer } from './sequencer';
+import { starterPatterns } from './patterns';
 import type { ModuleType } from './types';
 
 const types = new Map<string, ModuleType>();
@@ -34,6 +35,9 @@ for (const t of [
   filter, eq,
   vca, mixer, meter, light, logic, conductor, output,
 ]) register(t);
+
+// New sequencers start with a bank of starter patterns.
+for (const t of [sequencer, multiTracker, drumMap, lanes]) t.def.starterPresets = () => starterPatterns(t.def);
 
 /** Every worklet script any module needs, loaded once when audio starts. */
 export function allWorklets(): string[] {
