@@ -48,7 +48,7 @@ export function defaultPadParams(): PadParams {
 }
 
 /** PolyBLEP: rounds off a discontinuity so saws and squares don't alias badly. */
-function blep(t: number, dt: number): number {
+export function blep(t: number, dt: number): number {
   if (t < dt) {
     const x = t / dt;
     return x + x - x * x - 1;

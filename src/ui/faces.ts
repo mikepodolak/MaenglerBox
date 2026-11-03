@@ -1,3 +1,4 @@
+import { DRUM_LANES, DRUM_STEPS, LANE_COUNT, LANE_STEPS, mapIntensity, drumHit, type LanesData } from '../modules/chassis';
 import { EUCLID_COLORS, EUCLID_RINGS, euclidHit, ringSettings, turingLoop } from '../modules/generative';
 import { lfoShape } from '../dsp/lfo';
 import { LIFE_COLS, LIFE_ROWS } from '../modules/life';
@@ -34,6 +35,9 @@ export function createFace(m: ModuleInstance): Face | null {
   if (m.type === 'sh') return holdFace();
   if (m.type === 'balls') return ballsFace();
   if (m.type === 'life') return lifeFace();
+  if (m.type === 'drummap') return drumMapFace();
+  if (m.type === 'lanes') return lanesFace();
+  if (m.type === 'follower') return followerFace();
   return null;
 }
 
@@ -758,6 +762,172 @@ function sequencerFace(): Face {
       cells[lastStep]?.classList.remove('playing');
       cells[step]?.classList.add('playing');
       lastStep = step;
+    },
+  };
+}
+
+// --- Chassis-inspired modules ---------------------------------------------------
+
+/** Share of the Drum Map card's drawing given to the X/Y pad; the lane strip sits below. */
+export const DRUM_PAD_SHARE = 0.6;
+const DRUM_COLORS = ['#ff8a3d', '#f5c542', '#6fd1c4', '#b18cff'];
+
+/**
+ * An X/Y pad with the reading point, over a strip showing the four lanes'
+ * 32 steps as they play at that spot. Drag the pad to move the point.
+ */
+function drumMapFace(): Face {
+  const aspect = 1.1;
+  const c = liveCanvas('drummap-face', aspect);
+  let x = 0.3;
+  let y = 0.35;
+  let dens = [0.5, 0.5, 0.5, 0.5];
+  let live = { step: -1, hits: [] as number[] };
+  let key = '';
+  const draw = () => {
+    const k = `${x}:${y}:${dens.join()}:${live.step}:${live.hits.join()}:${c.el.clientWidth}`;
+    if (k === key) return;
+    key = k;
+    const d = c.begin();
+    if (!d) return;
+    const padH = d.h * DRUM_PAD_SHARE;
+    // The pad: a faint 3×3 grid of the map's patterns, and the dot.
+    d.g.strokeStyle = '#2c2f35';
+    d.g.lineWidth = 1;
+    for (let i = 1; i < 3; i++) {
+      d.g.beginPath();
+      d.g.moveTo((d.w * i) / 3, 0);
+      d.g.lineTo((d.w * i) / 3, padH);
+      d.g.moveTo(0, (padH * i) / 3);
+      d.g.lineTo(d.w, (padH * i) / 3);
+      d.g.stroke();
+    }
+    d.g.fillStyle = '#7d8590';
+    d.g.font = '10px system-ui, sans-serif';
+    d.g.fillText('broken →', d.w - 54, padH - 6);
+    d.g.fillText('busy ↑', 4, 12);
+    const px = x * d.w;
+    const py = (1 - y) * padH;
+    d.g.fillStyle = 'rgba(79, 179, 255, 0.25)';
+    d.g.beginPath();
+    d.g.arc(px, py, 16, 0, Math.PI * 2);
+    d.g.fill();
+    d.g.fillStyle = '#4fb3ff';
+    d.g.beginPath();
+    d.g.arc(px, py, 7, 0, Math.PI * 2);
+    d.g.fill();
+    // The lanes at this spot, without the Chaos wobble.
+    const top = padH + 4;
+    const rowH = (d.h - top) / DRUM_LANES.length;
+    const cw = d.w / DRUM_STEPS;
+    if (live.step >= 0) {
+      d.g.fillStyle = 'rgba(233, 230, 223, 0.12)';
+      d.g.fillRect(live.step * cw, top, cw, d.h - top);
+    }
+    for (let l = 0; l < DRUM_LANES.length; l++) {
+      for (let s = 0; s < DRUM_STEPS; s++) {
+        const it = mapIntensity(x, y, l, s);
+        if (!drumHit(it, dens[l])) continue;
+        const lit = s === live.step && live.hits.includes(l);
+        d.g.globalAlpha = lit ? 1 : 0.35 + 0.5 * it;
+        d.g.fillStyle = lit ? '#ffffff' : DRUM_COLORS[l];
+        d.g.fillRect(s * cw + 0.5, top + l * rowH + 1, Math.max(1, cw - 1), rowH - 2);
+      }
+    }
+    d.g.globalAlpha = 1;
+  };
+  return {
+    el: c.el,
+    update(m) {
+      x = m.params.x ?? x;
+      y = m.params.y ?? y;
+      dens = DRUM_LANES.map((_, l) => m.params[`dens${l + 1}`] ?? 0.5);
+      key = '';
+      requestAnimationFrame(draw);
+    },
+    tick(state) {
+      const st = state as { step?: number; hits?: number[]; x?: number; y?: number; dens?: number[] } | undefined;
+      live = { step: st?.step ?? -1, hits: st?.hits ?? [] };
+      // Cables moving X, Y or a density show up here too.
+      if (st?.x !== undefined) x = st.x;
+      if (st?.y !== undefined) y = st.y;
+      if (st?.dens) dens = st.dens;
+      draw();
+    },
+  };
+}
+
+const LANE_COLORS = ['#4fb3ff', '#ff8a3d', '#6fd1c4', '#f5c542'];
+
+/** Four painted lanes, stacked; steps past a lane's length are dimmed and the playheads glow. */
+function lanesFace(): Face {
+  const c = liveCanvas('lanes-face', 1.5);
+  let data: LanesData | null = null;
+  let lens = [16, 16, 16, 16];
+  let pos = [-1, -1, -1, -1];
+  let key = '';
+  const draw = () => {
+    const k = `${pos.join()}:${lens.join()}:${c.el.clientWidth}`;
+    if (k === key || !data) return;
+    key = k;
+    const d = c.begin();
+    if (!d) return;
+    const rowH = d.h / LANE_COUNT;
+    const cw = d.w / LANE_STEPS;
+    for (let l = 0; l < LANE_COUNT; l++) {
+      const y0 = l * rowH;
+      d.g.fillStyle = l % 2 ? '#1d2025' : '#202329';
+      d.g.fillRect(0, y0, d.w, rowH);
+      for (let s = 0; s < LANE_STEPS; s++) {
+        const v = data.values[l][s];
+        const inside = s < lens[l];
+        d.g.globalAlpha = s === pos[l] ? 1 : inside ? 0.7 : 0.18;
+        d.g.fillStyle = s === pos[l] ? '#ffffff' : LANE_COLORS[l];
+        const bh = Math.max(1.5, v * (rowH - 4));
+        d.g.fillRect(s * cw + 0.5, y0 + rowH - 2 - bh, Math.max(1, cw - 1), bh);
+      }
+    }
+    d.g.globalAlpha = 1;
+  };
+  return {
+    el: c.el,
+    update(m) {
+      data = m.data as LanesData;
+      lens = Array.from({ length: LANE_COUNT }, (_, l) => Math.round(m.params[`len${l + 1}`] ?? 16));
+      key = '';
+      requestAnimationFrame(draw);
+    },
+    tick(state) {
+      const st = state as { pos?: number[]; lens?: number[] } | undefined;
+      if (st?.pos) pos = st.pos;
+      if (st?.lens) lens = st.lens;
+      draw();
+    },
+  };
+}
+
+/** A level bar with the threshold marked; it turns warm while the gate is open. */
+function followerFace(): Face {
+  const c = liveCanvas('follower-face', 6);
+  let last = '';
+  return {
+    el: c.el,
+    update() {
+      last = '';
+    },
+    tick(state) {
+      const st = state as { level?: number; open?: boolean; threshold?: number } | undefined;
+      const level = Math.min(1, Math.max(0, st?.level ?? 0));
+      const th = st?.threshold ?? 0.3;
+      const k = `${level.toFixed(3)}:${st?.open}:${th}:${c.el.clientWidth}`;
+      if (k === last) return;
+      last = k;
+      const d = c.begin();
+      if (!d) return;
+      d.g.fillStyle = st?.open ? '#ff8a3d' : '#6fd1c4';
+      d.g.fillRect(0, 4, level * d.w, d.h - 8);
+      d.g.fillStyle = '#e9e6df';
+      d.g.fillRect(Math.min(d.w - 2, th * d.w), 0, 2, d.h);
     },
   };
 }

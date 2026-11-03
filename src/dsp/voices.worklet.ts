@@ -1,4 +1,6 @@
 import { defaultDrumParams, DrumVoice, type DrumParams } from './drum';
+import { defaultModalParams, ModalVoice, type ModalParams } from './modal';
+import { defaultSupersawParams, SupersawVoice, type SupersawParams } from './supersaw';
 import { defaultLeadParams, LeadVoice, type LeadParams } from './lead';
 import { defaultPadParams, PadVoice, type PadParams } from './pad';
 import { defaultPluckParams, PluckVoice, type PluckParams } from './pluck';
@@ -40,3 +42,5 @@ registerProcessor('mb-pluck', voiceProcessor<PluckParams>(() => new PolySynth(sa
 registerProcessor('mb-drum', voiceProcessor<DrumParams>(() => new PolySynth(sampleRate, defaultDrumParams(), () => new DrumVoice(), 6, false)));
 registerProcessor('mb-pad', voiceProcessor<PadParams>(() => new PolySynth(sampleRate, defaultPadParams(), () => new PadVoice(), 6)));
 registerProcessor('mb-texture', voiceProcessor<TextureParams>(() => new PolySynth(sampleRate, defaultTextureParams(), () => new TextureVoice(), 4)));
+registerProcessor('mb-modal', voiceProcessor<ModalParams>(() => new PolySynth(sampleRate, defaultModalParams(), () => new ModalVoice(), 4)));
+registerProcessor('mb-supersaw', voiceProcessor<SupersawParams>(() => new PolySynth(sampleRate, defaultSupersawParams(), () => new SupersawVoice(), 6)));
