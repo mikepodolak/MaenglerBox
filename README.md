@@ -125,7 +125,7 @@ The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or 
 
 **Factory presets.** The synths (FM Voice, FM Drum, FM Lead, Pluck, Pad, Texture) start with presets in an IDM palette: sub and click kicks, FM snares, hats and metal ticks, cold bells, acid FM bass, detuned pads, granular choirs. They go into empty library slots once per device and never replace your own.
 
-**Starter patterns.** A new Chance Sequencer starts with a pattern bank: Kit patterns (each step calls up an FM Drum preset, so one sequencer and one FM Drum play a whole beat), skittering ratchets, half-time, an acid bass line, minor melodies, an arp, 7- and 12-step polymeters, and a pattern that evolves with trig conditions. A new Tracker starts with an IDM band (kick, snare, hats, metal, bass, bells) and a polyrhythm. Open Patterns, pick Load and tap one.
+**Starter patterns.** A new Chance Sequencer starts with a pattern bank: Kit patterns (each step calls up an FM Drum preset, so one sequencer and one FM Drum play a whole beat), skittering ratchets, half-time, an acid bass line, minor melodies, an arp, 7- and 12-step polymeters, and a pattern that evolves with trig conditions. A new Tracker starts with an IDM band (kick, snare, hats, metal, bass, bells) and a polyrhythm. A new Drum Map starts with six spots on its map (Straight, Broken, Busy IDM, Sparse dub, Skitter chaos, Swung half-step) and a new Lanes with five sets of shapes (Ramps, Random walks, Stepped, Breathing, Accents). The Freq Shifter gets factory presets from barber-pole phasing to metal spirals. Open Presets or Patterns, pick Load and tap one.
 
 ## Effects
 

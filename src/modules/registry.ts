@@ -37,7 +37,7 @@ for (const t of [
 ]) register(t);
 
 // New sequencers start with a bank of starter patterns.
-for (const t of [sequencer, multiTracker]) t.def.starterPresets = () => starterPatterns(t.def);
+for (const t of [sequencer, multiTracker, drumMap, lanes]) t.def.starterPresets = () => starterPatterns(t.def);
 
 /** Every worklet script any module needs, loaded once when audio starts. */
 export function allWorklets(): string[] {

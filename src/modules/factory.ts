@@ -80,6 +80,13 @@ const FACTORY: Record<string, Sketch[]> = {
     ['Wood block', { body: 6, decay: 0.12, material: 0.05, position: 0.3, bend: 1, bendTime: 0.02, exciter: 0, hardness: 0.85, noise: 0.05, transpose: 12 }],
     ['Kalimba tine', { body: 8, decay: 1.4, material: 0.55, stretch: 0.08, position: 0.1, bend: 0.2, bendTime: 0.02, exciter: 1, hardness: 0.7, noise: 0 }],
   ],
+  shifter: [
+    ['Barber pole', { shift: 0.4, fine: 0, side: 0, feedback: 0.6, mix: 0.5 }],
+    ['Subtle swirl', { shift: 3, fine: 0, side: 2, feedback: 0.2, mix: 0.4 }],
+    ['Bell maker', { shift: 180, side: 0, feedback: 0, mix: 0.8 }],
+    ['Metal spiral', { shift: 420, side: 0, feedback: 0.75, mix: 0.7 }],
+    ['Down-shift grit', { shift: 95, side: 1, feedback: 0.35, mix: 0.85 }],
+  ],
   supersaw: [
     ['Rave stab', { voices: 7, detune: 0.45, blend: 0.65, sub: 0.2, cutoff: 1800, resonance: 1.5, filterEnv: 2.5, filterDecay: 0.25, attack: 0.002, decay: 0.3, sustain: 0.2, release: 0.25 }],
     ['Wide chord', { voices: 9, detune: 0.35, blend: 0.6, sub: 0.15, drift: 4, cutoff: 3000, resonance: 0.8, filterEnv: 0.8, filterDecay: 1.2, attack: 0.05, decay: 1.5, sustain: 0.8, release: 1.2 }],

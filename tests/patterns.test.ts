@@ -59,3 +59,28 @@ describe('starter patterns', () => {
     expect(synth.activeVoices).toBe(2);
   });
 });
+
+describe('Chassis-inspired presets', () => {
+  it('Drum Map and Lanes start with banks whose settings are in range', () => {
+    for (const type of ['drummap', 'lanes']) {
+      const def = getDefOrThrow(type);
+      const [, m] = addModule(createPatch(), def);
+      expect(m.presets?.filter(Boolean).length, type).toBeGreaterThanOrEqual(5);
+      for (const p of m.presets!) {
+        for (const [k, v] of Object.entries(p!.params)) {
+          const d = def.params.find((x) => x.id === k);
+          expect(d, `${type} ${p!.name} ${k}`).toBeDefined();
+          expect(v).toBeGreaterThanOrEqual(d!.min);
+          expect(v).toBeLessThanOrEqual(d!.max);
+        }
+      }
+    }
+  });
+
+  it('Freq Shifter has factory presets in range', () => {
+    const def = getDefOrThrow('shifter');
+    const presets = factoryPresets(def);
+    expect(presets.length).toBeGreaterThanOrEqual(4);
+    for (const p of presets) for (const d of def.params) if (d.id !== 'morph') expect(p.params[d.id]).toBeGreaterThanOrEqual(d.min);
+  });
+});

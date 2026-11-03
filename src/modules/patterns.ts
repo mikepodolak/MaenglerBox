@@ -1,5 +1,6 @@
 import { defaultParams } from '../patch/model';
 import type { ModuleDef, Preset } from '../patch/types';
+import { LANE_STEPS } from './chassis';
 import { MAX_STEPS, sequencerData, type SequencerData, type Step } from './sequencer';
 
 /**
@@ -126,11 +127,46 @@ const TRACKER: [string, Record<string, number>, ReturnType<typeof trackerPattern
 
 function complete(def: ModuleDef, sketches: [string, Record<string, number>, unknown][]): Preset[] {
   const base = defaultParams(def);
-  return sketches.map(([name, params, data]) => ({ name, params: { ...base, ...params }, data: def.data ? def.data.normalize(data) : data }));
+  return sketches.map(([name, params, data]) => {
+    const preset: Preset = { name, params: { ...base, ...params } };
+    if (def.data) preset.data = def.data.normalize(data);
+    return preset;
+  });
 }
 
-/** The starting pattern bank for a new Chance Sequencer or Tracker. */
+/** Drum Map spots: where on the map, how dense each lane is, and how loose. */
+const DRUM_MAP: [string, Record<string, number>, undefined][] = [
+  ['Straight', { x: 0.05, y: 0.3, dens1: 0.7, dens2: 0.6, dens3: 0.55, dens4: 0.2, chaos: 0, lock: 1, fillEvery: 2, fillAmount: 0.3, swing: 0 }, undefined],
+  ['Broken', { x: 0.85, y: 0.4, dens1: 0.65, dens2: 0.55, dens3: 0.5, dens4: 0.35, chaos: 0.15, lock: 0.8, fillEvery: 2, fillAmount: 0.5, swing: 0.1 }, undefined],
+  ['Busy IDM', { x: 0.7, y: 0.9, dens1: 0.6, dens2: 0.65, dens3: 0.8, dens4: 0.6, chaos: 0.3, lock: 0.5, fillEvery: 1, fillAmount: 0.7, swing: 0 }, undefined],
+  ['Sparse dub', { x: 0.35, y: 0.05, dens1: 0.75, dens2: 0.5, dens3: 0.3, dens4: 0.15, chaos: 0.05, lock: 1, fillEvery: 3, fillAmount: 0.3, swing: 0.25 }, undefined],
+  ['Skitter chaos', { x: 1, y: 0.75, dens1: 0.5, dens2: 0.5, dens3: 0.85, dens4: 0.7, chaos: 0.7, lock: 0, fillEvery: 1, fillAmount: 0.9, swing: 0 }, undefined],
+  ['Swung half-step', { x: 0.5, y: 0.25, dens1: 0.6, dens2: 0.55, dens3: 0.6, dens4: 0.3, chaos: 0.1, lock: 0.9, fillEvery: 2, fillAmount: 0.4, swing: 0.45 }, undefined],
+];
+
+/** Lanes shapes, 32 steps each, with each lane's own length. */
+const lane = (f: (i: number) => number) => Array.from({ length: LANE_STEPS }, (_, i) => Math.min(1, Math.max(0, f(i))));
+/** A repeatable random walk, so the preset is the same on every device. */
+function walk(seed: number, step = 0.18): number[] {
+  let v = 0.5;
+  let s = seed;
+  return lane(() => {
+    s = (s * 16807) % 2147483647;
+    v = Math.min(1, Math.max(0, v + ((s / 2147483647) * 2 - 1) * step));
+    return v;
+  });
+}
+
+const LANES: [string, Record<string, number>, { values: number[][] }][] = [
+  ['Ramps', { len1: 16, len2: 12, len3: 32, len4: 7, smooth: 0.3 }, { values: [lane((i) => (i % 16) / 15), lane((i) => 1 - (i % 12) / 11), lane((i) => i / 31), lane((i) => (i % 7) / 6)] }],
+  ['Random walks', { len1: 32, len2: 24, len3: 17, len4: 9, smooth: 0.6 }, { values: [walk(3), walk(11), walk(29, 0.3), walk(47, 0.4)] }],
+  ['Stepped', { len1: 8, len2: 6, len3: 16, len4: 5, smooth: 0 }, { values: [lane((i) => [0, 0.6, 0.3, 0.9, 0.1, 0.7, 0.4, 1][i % 8]), lane((i) => [1, 0.2, 0.5, 0.8, 0, 0.4][i % 6]), lane((i) => (Math.floor(i / 2) % 4) / 3), lane((i) => [0.2, 1, 0.5, 0, 0.8][i % 5])] }],
+  ['Breathing', { len1: 32, len2: 32, len3: 24, len4: 20, smooth: 0.9, rate: 3 }, { values: [lane((i) => 0.5 - 0.5 * Math.cos((i / 32) * Math.PI * 2)), lane((i) => 0.5 + 0.5 * Math.sin((i / 32) * Math.PI * 4)), lane((i) => 0.5 - 0.5 * Math.cos((i / 24) * Math.PI * 2)), lane((i) => 0.3 + 0.4 * Math.sin((i / 20) * Math.PI * 2) ** 2)] }],
+  ['Accents', { len1: 16, len2: 16, len3: 12, len4: 5, smooth: 0 }, { values: [lane((i) => ([0, 6, 10].includes(i % 16) ? 1 : 0.2)), lane((i) => (i % 4 === 2 ? 0.9 : 0.1)), lane((i) => ([0, 3, 7].includes(i % 12) ? 1 : 0)), lane((i) => (i % 5 === 0 ? 1 : 0.3))] }],
+];
+
+/** The starting bank for a new module whose presets live in the patch: patterns, map spots or lane shapes. */
 export function starterPatterns(def: ModuleDef): (Preset | null)[] {
-  const sketches = def.type === 'sequencer' ? CHANCE_SEQUENCER : def.type === 'tracker' ? TRACKER : [];
-  return complete(def, sketches);
+  const banks: Record<string, [string, Record<string, number>, unknown][]> = { sequencer: CHANCE_SEQUENCER, tracker: TRACKER, drummap: DRUM_MAP, lanes: LANES };
+  return complete(def, banks[def.type] ?? []);
 }
