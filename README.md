@@ -112,6 +112,8 @@ The **LFO** module (Modulation) is the usual source: seven shapes, Free rate or 
 
 **Factory presets.** The synths (FM Voice, FM Drum, FM Lead, Pluck, Pad, Texture) start with presets in an IDM palette: sub and click kicks, FM snares, hats and metal ticks, cold bells, acid FM bass, detuned pads, granular choirs. They go into empty library slots once per device and never replace your own.
 
+**Starter patterns.** A new Chance Sequencer starts with a pattern bank: Kit patterns (each step calls up an FM Drum preset, so one sequencer and one FM Drum play a whole beat), skittering ratchets, half-time, an acid bass line, minor melodies, an arp, 7- and 12-step polymeters, and a pattern that evolves with trig conditions. A new Tracker starts with an IDM band (kick, snare, hats, metal, bass, bells) and a polyrhythm. Open Patterns, pick Load and tap one.
+
 ## Effects
 
 - **Tape Delay**: darkening, saturating repeats with wow and flutter; patch a clock in to sync the echo time.
